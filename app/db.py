@@ -118,6 +118,34 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "ON activity_log(course_id)"
     )
 
+    # ---- Phase 11: Course Groups / Semesters ----
+    # The course_groups TABLE itself is created by schema.sql on every boot
+    # (CREATE IF NOT EXISTS); only column evolution on pre-existing tables
+    # belongs here.
+    course_cols = {row[1] for row in conn.execute("PRAGMA table_info(courses)")}
+    if "group_id" not in course_cols:
+        # Phase 11: which Course Group (Semester/Track) a course belongs to.
+        # NULL = ungrouped. Integrity is enforced in the app layer (same
+        # pattern as every other FK column in this codebase).
+        conn.execute("ALTER TABLE courses ADD COLUMN group_id INTEGER")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_courses_group ON courses(group_id)"
+    )
+
+    prompt_cols = {row[1] for row in conn.execute("PRAGMA table_info(roommate_prompts)")}
+    if "secondary_course_id" not in prompt_cols:
+        # Phase 11 (P5): the OTHER course an intra-group prompt bridges.
+        conn.execute(
+            "ALTER TABLE roommate_prompts ADD COLUMN secondary_course_id INTEGER"
+        )
+    if "connection_type" not in prompt_cols:
+        # Phase 11: 'external' (course → unrelated field) vs 'intra_group'
+        # (course A ↔ course B in the same group).
+        conn.execute(
+            "ALTER TABLE roommate_prompts ADD COLUMN connection_type "
+            "TEXT NOT NULL DEFAULT 'external'"
+        )
+
 def init_db() -> Path:
     """Create all tables if they don't exist yet. Safe to call on every boot."""
     path = get_db_path()

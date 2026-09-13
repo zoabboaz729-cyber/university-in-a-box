@@ -1,4 +1,4 @@
-"""Roommate prompt persistence — Phase 6.
+"""Roommate prompt persistence — Phase 6 (+ Phase 11 intra-group).
 
 One row in roommate_prompts per generated prompt (course_id, field,
 prompt_text, created_at, user_reaction). Rows are written only with
@@ -7,6 +7,11 @@ Generation is logged with is_user=False (the app generated it, the user
 didn't — a prompt appearing must not refresh days-since-activity); a
 user REACTION is logged with is_user=True because that is real
 engagement. Both carry the owning course_id (D-015).
+
+Phase 11 (P5): a prompt may be an 'intra_group' cross-course bridge —
+course_id is the primary course, secondary_course_id the OTHER course in
+the same group. 'external' prompts (one course → unrelated field) are the
+pre-Phase-11 behavior and keep secondary_course_id NULL.
 """
 from app.db import get_connection
 from app.roles.activity import days_since, log
@@ -14,6 +19,8 @@ from app.roles.activity import days_since, log
 from pathlib import Path
 
 MAX_REACTION_CHARS = 2000
+
+GROUP_CONNECTION_TYPES = ("external", "intra_group")
 
 
 def prompt_newer_than(since: str | None) -> dict | None:
@@ -40,18 +47,26 @@ def prompt_newer_than(since: str | None) -> dict | None:
 
 
 def save_prompt(course_id: int, field: str, prompt_text: str,
-                created_at: str | None = None) -> int:
+                created_at: str | None = None,
+                secondary_course_id: int | None = None,
+                connection_type: str = "external") -> int:
     """Persist one complete prompt. Returns the prompt id.
 
     `created_at` is normally omitted: a millisecond-precision UTC "now" is
     used so prompts are strictly orderable against the equally precise
     dashboard-visit timestamps (the durable badge relies on
     `prompt.created_at > visit`). Tests pass it explicitly to backdate.
+
+    Phase 11: `connection_type` is 'external' (default) or 'intra_group';
+    for intra_group prompts `secondary_course_id` names the other course
+    in the same group. Both are validated before anything is written.
     """
     if not field or not field.strip():
         raise ValueError("roommate field is empty")
     if not prompt_text or not prompt_text.strip():
         raise ValueError("roommate prompt is empty")
+    if connection_type not in GROUP_CONNECTION_TYPES:
+        raise ValueError("unknown connection type: " + connection_type)
     if created_at is None:
         from datetime import datetime, timezone
         created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -61,11 +76,22 @@ def save_prompt(course_id: int, field: str, prompt_text: str,
         ).fetchone()
         if course is None:
             raise ValueError("course not found: " + str(course_id))
+        if secondary_course_id is not None:
+            if secondary_course_id == course_id:
+                raise ValueError("secondary course cannot be the same course")
+            peer = conn.execute(
+                "SELECT id FROM courses WHERE id = ?", (secondary_course_id,)
+            ).fetchone()
+            if peer is None:
+                raise ValueError(
+                    "secondary course not found: " + str(secondary_course_id))
         cursor = conn.execute(
             "INSERT INTO roommate_prompts "
-            "(course_id, field, prompt_text, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (course_id, field.strip(), prompt_text.strip(), created_at),
+            "(course_id, field, prompt_text, created_at, "
+            " secondary_course_id, connection_type) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (course_id, field.strip(), prompt_text.strip(), created_at,
+             secondary_course_id, connection_type),
         )
         prompt_id = cursor.lastrowid
     log(course_id, "roommate", prompt_id, "generated", is_user=False)
@@ -108,6 +134,32 @@ def due_courses(cadence: int) -> list[dict]:
             continue  # prompted recently enough
         due.append(dict(row))
     return due
+
+
+def peer_course(course_id: int) -> dict | None:
+    """The first ACTIVE course in the same group as `course_id`, or None.
+
+    Phase 11 (P5): intra-group synthesis bridges two courses the user is
+    taking together. Only ACTIVE courses qualify as the peer — a paused or
+    archived course never silently drags a live one into a prompt. The
+    peer's current topic (first not-done, same rule the dashboard uses)
+    is included so the prompt can be concrete.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT c2.id, c2.title, c2.destination, "
+            "  (SELECT t.title FROM topics t "
+            "   WHERE t.course_id = c2.id AND t.status != 'done' "
+            "   ORDER BY t.order_index LIMIT 1) AS current_topic_title "
+            "FROM courses c1 "
+            "JOIN courses c2 ON c2.group_id = c1.group_id "
+            "  AND c2.id != c1.id "
+            "WHERE c1.id = ? AND c1.group_id IS NOT NULL "
+            "  AND c1.status = 'active' AND c2.status = 'active' "
+            "ORDER BY c2.id LIMIT 1",
+            (course_id,),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def last_backup_info(data_dir=None):
@@ -204,12 +256,20 @@ def record_dash_visit() -> None:
         )
 
 def list_all_prompts() -> list[dict]:
-    """Every prompt, newest first, joined with its course title (journal)."""
+    """Every prompt, newest first, joined with its course title (journal).
+
+    Phase 11: intra-group prompts also carry the OTHER course's title so
+    the journal can show "Course A ↔ Course B" instead of guessing.
+    """
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT rp.id, rp.course_id, rp.field, rp.prompt_text, "
-            "rp.user_reaction, rp.created_at, c.title AS course_title "
-            "FROM roommate_prompts rp JOIN courses c ON c.id = rp.course_id "
+            "rp.user_reaction, rp.created_at, rp.secondary_course_id, "
+            "rp.connection_type, c.title AS course_title, "
+            "c2.title AS secondary_course_title "
+            "FROM roommate_prompts rp "
+            "JOIN courses c ON c.id = rp.course_id "
+            "LEFT JOIN courses c2 ON c2.id = rp.secondary_course_id "
             "ORDER BY rp.id DESC",
         ).fetchall()
         return [dict(row) for row in rows]

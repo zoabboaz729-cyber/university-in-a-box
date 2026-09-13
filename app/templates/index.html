@@ -37,48 +37,113 @@
 
 <div class="section-head">
   <h2>Your courses</h2>
+  <div class="filter-pills">
+    <a class="filter-pill{% if group_filter == 'all' %} active{% endif %}" href="/">All</a>
+    {% for g in groups_meta %}
+    <a class="filter-pill{% if group_filter == g.id | string %} active{% endif %}" href="/?group={{ g.id }}">{{ g.name }}</a>
+    {% endfor %}
+    <a class="filter-pill{% if group_filter == 'none' %} active{% endif %}" href="/?group=none">Ungrouped</a>
+  </div>
   <a class="btn btn-primary btn-sm" href="/advisor/new">Start a new course</a>
 </div>
 
-{% if courses %}
-<div class="courses-list">
-  {% for course in courses %}
-  <div class="course-row">
-    <div class="course-num">{{ "%02d" | format(loop.index) }}</div>
-    <div>
-      <p class="course-title"><a href="/courses/{{ course.id }}">{{ course.title }}</a></p>
-      {% if course.current_topic %}
-      <p class="course-sub">next: <a href="/topics/{{ course.current_topic.id }}">{{ course.current_topic.title }}</a></p>
-      {% elif course.total_topics > 0 %}
-      <p class="course-sub">all topics done</p>
-      {% else %}
-      <p class="course-sub">no topics yet</p>
+{% macro course_row(row_course, row_index) %}
+<div class="course-row">
+  <div class="course-num">{{ "%02d" | format(row_index) }}</div>
+  <div>
+    <p class="course-title"><a href="/courses/{{ row_course.id }}">{{ row_course.title }}</a></p>
+    {% if row_course.current_topic %}
+    <p class="course-sub">next: <a href="/topics/{{ row_course.current_topic.id }}">{{ row_course.current_topic.title }}</a></p>
+    {% elif row_course.total_topics > 0 %}
+    <p class="course-sub">all topics done</p>
+    {% else %}
+    <p class="course-sub">no topics yet</p>
+    {% endif %}
+    <div class="course-progress">
+      <div class="prog-bar"><span style="width:{{ ((row_course.done_topics / row_course.total_topics * 100) | int) if row_course.total_topics > 0 else 0 }}%"></span></div>
+      topics {{ row_course.done_topics }}/{{ row_course.total_topics }}
+    </div>
+    {% if row_course.last_gap_note or row_course.last_review_note %}
+    <div class="course-notes">
+      {% if row_course.last_gap_note %}
+      <div class="course-note"><b>last gap:</b> {{ row_course.last_gap_note }}</div>
       {% endif %}
-      <div class="course-progress">
-        <div class="prog-bar"><span style="width:{{ ((course.done_topics / course.total_topics * 100) | int) if course.total_topics > 0 else 0 }}%"></span></div>
-        topics {{ course.done_topics }}/{{ course.total_topics }}
-      </div>
-      {% if course.last_gap_note or course.last_review_note %}
-      <div class="course-notes">
-        {% if course.last_gap_note %}
-        <div class="course-note"><b>last gap:</b> {{ course.last_gap_note }}</div>
-        {% endif %}
-        {% if course.last_review_note %}
-        <div class="course-note"><b>last review:</b> {{ course.last_review_note }}</div>
-        {% endif %}
-      </div>
+      {% if row_course.last_review_note %}
+      <div class="course-note"><b>last review:</b> {{ row_course.last_review_note }}</div>
       {% endif %}
     </div>
-    <div class="course-side">
-      {% if course.days_since_activity is not none %}
-      <span>active {{ course.days_since_activity }} day(s) ago</span>
-      {% endif %}
-      <div>
-        <span class="pill {{ course.status }}">{{ course.status }}</span>
-        <span style="font-size:0.72rem;color:var(--ink-faint);display:block;margin-top:0.2rem">created {{ course.created_at }}</span>
-      </div>
-    </div>
+    {% endif %}
   </div>
+  <div class="course-side">
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:0.5rem">
+      <span class="pill {{ row_course.status }}">{{ row_course.status }}</span>
+      <div class="course-menu-wrap">
+        <button type="button" class="course-menu-btn" aria-label="Options for {{ row_course.title }}" title="Course options"
+                onclick="toggleCourseMenu(event, 'dash-menu-{{ row_course.id }}')">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="8" cy="3" r="1.5"/>
+            <circle cx="8" cy="8" r="1.5"/>
+            <circle cx="8" cy="13" r="1.5"/>
+          </svg>
+        </button>
+        <div id="dash-menu-{{ row_course.id }}" class="course-menu-dropdown" style="display:none;">
+          <a href="/courses/{{ row_course.id }}" class="course-menu-item">
+            <span>↗ Open course</span>
+          </a>
+          <button type="button" class="course-menu-item"
+                  onclick="closeAllCourseMenus(); openGroupModal('{{ row_course.id }}', '{{ row_course.title | escape }}', window.location.pathname, {{ row_course.group_id if row_course.group_id is not none else 'null' }})">
+            <span>📁 Group / Semester…</span>
+          </button>
+          <button type="button" class="course-menu-item course-menu-item-danger"
+                  onclick="closeAllCourseMenus(); openDeleteModal('{{ row_course.id }}', '{{ row_course.title | escape }}')">
+            <span>🗑 Delete course</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    {% if row_course.days_since_activity is not none %}
+    <span style="display:block;margin-top:0.35rem">active {{ row_course.days_since_activity }} day(s) ago</span>
+    {% endif %}
+    <span style="font-size:0.72rem;color:var(--ink-faint);display:block;margin-top:0.2rem">created {{ row_course.created_at }}</span>
+  </div>
+</div>
+{% endmacro %}
+
+{% if dashboard_groups %}
+<div class="courses-list">
+  {% for block in dashboard_groups %}
+    {% if block.group %}
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3 class="group-card-title">{{ block.group.name }}</h3>
+        <span class="pill gold">{{ block.group.timeframe_mode }}</span>
+        {% if block.group.timeframe_duration %}<span class="pill">{{ block.group.timeframe_duration }}</span>{% endif %}
+      </div>
+      <p class="group-card-meta">
+        {{ block.group.done_topics }} of {{ block.group.total_topics }} topics completed
+        ({{ ((block.group.done_topics / block.group.total_topics * 100) | int) if block.group.total_topics > 0 else 0 }}%)
+        &middot; {{ block.courses | length }} course{{ "s" if block.courses | length != 1 else "" }}
+      </p>
+      <div class="group-card-progress">
+        <div class="prog-bar"><span style="width:{{ ((block.group.done_topics / block.group.total_topics * 100) | int) if block.group.total_topics > 0 else 0 }}%"></span></div>
+      </div>
+      {% if block.courses %}
+      {% for row_course in block.courses %}
+      {{ course_row(row_course, loop.index) }}
+      {% endfor %}
+      {% else %}
+      <p class="group-card-empty">No courses in this group yet — use a course's ⋮ menu to move one here.</p>
+      {% endif %}
+    </div>
+    {% else %}
+      {% if block.courses %}
+      {% for row_course in block.courses %}
+      {{ course_row(row_course, loop.index) }}
+      {% endfor %}
+      {% else %}
+      <p class="group-card-empty">No ungrouped courses — everything is filed into a group.</p>
+      {% endif %}
+    {% endif %}
   {% endfor %}
 </div>
 {% else %}

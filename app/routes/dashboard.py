@@ -17,7 +17,7 @@ from starlette.requests import Request
 
 from app.ai.provider import get_provider
 from app.monitor import get_logger
-from app.roles import roommate
+from app.roles import group_store, roommate
 from app.roles.dashboard import list_dashboard_courses
 from app.roles.roommate_store import (
     dash_visit_at,
@@ -101,10 +101,42 @@ def index(request: Request):
     # Durable badge: a newer prompt exists than the LAST visit the user saw.
     new_since_visit = prompt_newer_than(last_visit) is not None
 
+    # Phase 11: the dashboard can be narrowed to one group, ungrouped
+    # courses, or everything ('all'). Rendered as explicit blocks so the
+    # template stays a plain loop ([{group: {...}|None, courses: [...]}]).
+    group_filter = request.query_params.get("group", "all")
+    if group_filter != "none" and not (group_filter == "all"
+                                       or group_filter.isdigit()):
+        group_filter = "all"
+    blocks = []
+    if group_filter == "all":
+        for group in group_store.list_groups():
+            blocks.append({
+                "group": group,
+                "courses": group_store.courses_in_group(group["id"]),
+            })
+        ungrouped = group_store.list_ungrouped_courses()
+        if ungrouped:
+            blocks.append({"group": None, "courses": ungrouped})
+    elif group_filter == "none":
+        blocks.append({
+            "group": None, "courses": group_store.list_ungrouped_courses(),
+        })
+    else:
+        group = group_store.get_group(int(group_filter))
+        if group is not None:
+            blocks.append({
+                "group": group,
+                "courses": group_store.courses_in_group(group["id"]),
+            })
+
     return templates.TemplateResponse(
         request, "index.html",
         {
             "courses": list_dashboard_courses(),
+            "dashboard_groups": blocks,
+            "groups_meta": group_store.list_groups(),
+            "group_filter": group_filter,
             "latest_roommate_prompt": rendered_prompt,
             "new_since_visit": new_since_visit,
         },

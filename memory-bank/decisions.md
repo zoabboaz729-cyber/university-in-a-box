@@ -4,6 +4,57 @@
 changes. Newest at the top. These are defaults set during planning; they're changeable, not
 commandments — but changing one should get its own entry explaining why.*
 
+### D-022 — Course Groups / Semesters architecture & multi-course insights choices
+**Date:** 2026-09-13 (Phase 11 planning; approved by owner)
+**Context:** The owner approved coupling courses into Groups (e.g. "Semester 1",
+"Systems Track") to allow cohort organization, shared timeframe pacing, and
+cross-course Roommate synthesis. Two key design decisions required owner choice:
+(1) what happens to courses when a group is deleted, and (2) group timeframe mode
+default.
+**Decision:**
+1. Group deletion follows Option B: offer the user an explicit choice between
+   "Ungroup courses" (preserves courses, sets `group_id = NULL`) and "Delete group
+   and all its courses" (cascades delete across all grouped courses), displaying
+   clear consequence warnings for both options.
+2. Group timeframe follows Option A: default to individual course pacing
+   (courses set their own time boxes), with an optional toggle for uniform semester
+   duration (e.g., "12 weeks") across all courses in the group.
+**Consequences:** Evolving the schema with a `course_groups` table and a `group_id`
+column on `courses`. Enables intra-group cross-course synthesis in Roommate (P5).
+**Implemented (same day, Phase 11 session):** all of the above shipped —
+`group_store.py` / `routes/groups.py` / `templates/groups.html` / `db.py`
+migration / `roommate_intra.md`; `delete_course` also nulls other courses'
+`secondary_course_id` so intra-group bridges never dangle. Full suite
+160 passed.
+
+---
+
+### D-021 — Course Deletion & Universal 3-Dots Context Menu
+**Date:** 2026-09-13 (Phase 10; owner-requested for cleaning test/fake courses)
+**Context:** User validated early workflows with fake/test courses; now desires to
+clear clutter and delete courses permanently. Deletion must adhere to P7 (agency),
+P6 (durability), and P8 (simple, explicit SQL over implicit magic). Deleting a course
+must cascade cleanly across all 8 dependent child tables (topics, librarian sources,
+tutor sessions, tutor turns, editor reviews, advisor interviews, roommate prompts,
+and activity log) so no dangling/orphaned rows or phantom streaks remain.
+**Decision:**
+1. Atomic cascading deletion implemented via `delete_course(course_id)` in
+   `app/roles/course_manage.py` and routed at `POST /courses/{course_id}/delete`.
+2. UI interaction pattern: every course in the persistent sidebar and dashboard
+   carries an accessible 3-dots (`⋮`) context menu with "Open course" and "Delete course".
+   The course details page (`course.html`) also provides an explicit "Delete course" action.
+3. Consequence Warning Modal: native `<dialog id="delete-course-modal">` in `base.html`
+   styled with Reading Room design tokens (`--paper-card`, `--danger`). Lists all
+   consequences explicitly (all topics, sources, sessions, reviews, prompts, streaks wiped).
+   Cancel closes with zero side effects; confirm submits `POST /courses/{id}/delete`.
+4. Dependent systems adapt: Roommate `latest_prompt()` falls back seamlessly to the
+   next active course prompt (or None); dashboard recalculates active counts and streaks;
+   direct URL visits return friendly 404s.
+**Consequences:** 134 → 139 passing tests (all 5 new tests pass; 100% full-suite pass rate).
+Clean, modern contextual control across all course touchpoints.
+
+---
+
 ### D-020 — The "start a new course" entry point existed only as a URL; restored as dashboard button + nav link
 **Date:** 2026-09-13 (Phase 8; owner-reported "I can't see where to start a new course")
 **Context:** The full Phase-1 Advisor flow (topic form → five-step interview →

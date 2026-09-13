@@ -8,6 +8,17 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS course_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    timeframe_mode TEXT NOT NULL DEFAULT 'individual', -- 'uniform' vs 'individual'
+    timeframe_duration TEXT,                          -- e.g. "12 weeks", "Sept 1 - Dec 15"
+    status TEXT NOT NULL DEFAULT 'active',            -- 'active', 'completed', 'archived'
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS courses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER REFERENCES users(id),
@@ -16,7 +27,10 @@ CREATE TABLE IF NOT EXISTS courses (
     baseline TEXT,
     cut_list TEXT,
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Phase 11: the Course Group (Semester/Track) this course belongs to.
+    -- NULL = ungrouped. App-level integrity (same pattern as other FKs here).
+    group_id INTEGER REFERENCES course_groups(id)
 );
 
 CREATE TABLE IF NOT EXISTS topics (
@@ -82,7 +96,13 @@ CREATE TABLE IF NOT EXISTS roommate_prompts (
     field TEXT,
     prompt_text TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    user_reaction TEXT
+    user_reaction TEXT,
+    -- Phase 11 (P5): intra-group cross-course prompts bridge two courses
+    -- taken together in the same group. secondary_course_id = the OTHER
+    -- course; connection_type = 'external' (one course → unrelated field)
+    -- or 'intra_group' (course A ↔ course B in the same group).
+    secondary_course_id INTEGER REFERENCES courses(id),
+    connection_type TEXT NOT NULL DEFAULT 'external'
 );
 
 CREATE TABLE IF NOT EXISTS _dash_visits (

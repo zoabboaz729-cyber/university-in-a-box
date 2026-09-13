@@ -30,15 +30,88 @@
         <a class="nav-new-link" href="/advisor/new">+ New</a>
       </div>
       <div class="sidebar-courses">
-        {% set courses_sb = sidebar_courses() %}
-        {% for c in courses_sb %}
-        <a class="sidebar-course" href="/courses/{{ c.id }}">
-          <span class="sidebar-course-title">{{ c.title }}</span>
-          <span class="sidebar-course-meta">
-            <span class="status-dot {{ c.status }}"></span>
-            {{ c.done_topics }} / {{ c.total_topics }} topics
-          </span>
-        </a>
+        {% set groups_sb = sidebar_groups() %}
+        {% for block in groups_sb %}
+          {% if block.group %}
+          <details class="sidebar-group"{% if block.courses %} open{% endif %}>
+            <summary class="sidebar-group-head" title="{{ block.group.timeframe_duration or block.group.timeframe_mode }}">
+              <span class="sidebar-group-caret">▾</span>
+              <span class="sidebar-group-name">{{ block.group.name }}</span>
+              <span class="sidebar-group-meta">{{ block.courses | length }} course{{ "s" if block.courses | length != 1 else "" }}</span>
+            </summary>
+            <div class="sidebar-group-courses">
+            {% for c in block.courses %}
+            <div class="sidebar-course-item">
+              <a class="sidebar-course" href="/courses/{{ c.id }}">
+                <span class="sidebar-course-title">{{ c.title }}</span>
+                <span class="sidebar-course-meta">
+                  <span class="status-dot {{ c.status }}"></span>
+                  {{ c.done_topics }} / {{ c.total_topics }} topics
+                </span>
+              </a>
+              <div class="course-menu-wrap">
+                <button type="button" class="course-menu-btn" aria-label="Options for {{ c.title }}" title="Course options"
+                        onclick="toggleCourseMenu(event, 'sb-menu-{{ c.id }}')">
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="3" r="1.5"/>
+                    <circle cx="8" cy="8" r="1.5"/>
+                    <circle cx="8" cy="13" r="1.5"/>
+                  </svg>
+                </button>
+                <div id="sb-menu-{{ c.id }}" class="course-menu-dropdown" style="display:none;">
+                  <a href="/courses/{{ c.id }}" class="course-menu-item">
+                    <span>↗ Open course</span>
+                  </a>
+                  <button type="button" class="course-menu-item"
+                          onclick="closeAllCourseMenus(); openGroupModal('{{ c.id }}', '{{ c.title | escape }}', window.location.pathname, {{ c.group_id if c.group_id is not none else 'null' }})">
+                    <span>📁 Group / Semester…</span>
+                  </button>
+                  <button type="button" class="course-menu-item course-menu-item-danger"
+                          onclick="closeAllCourseMenus(); openDeleteModal('{{ c.id }}', '{{ c.title | escape }}')">
+                    <span>🗑 Delete course</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+            </div>
+          </details>
+          {% else %}
+          {% for c in block.courses %}
+          <div class="sidebar-course-item">
+            <a class="sidebar-course" href="/courses/{{ c.id }}">
+              <span class="sidebar-course-title">{{ c.title }}</span>
+              <span class="sidebar-course-meta">
+                <span class="status-dot {{ c.status }}"></span>
+                {{ c.done_topics }} / {{ c.total_topics }} topics
+              </span>
+            </a>
+            <div class="course-menu-wrap">
+              <button type="button" class="course-menu-btn" aria-label="Options for {{ c.title }}" title="Course options"
+                      onclick="toggleCourseMenu(event, 'sb-menu-{{ c.id }}')">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                  <circle cx="8" cy="3" r="1.5"/>
+                  <circle cx="8" cy="8" r="1.5"/>
+                  <circle cx="8" cy="13" r="1.5"/>
+                </svg>
+              </button>
+              <div id="sb-menu-{{ c.id }}" class="course-menu-dropdown" style="display:none;">
+                <a href="/courses/{{ c.id }}" class="course-menu-item">
+                  <span>↗ Open course</span>
+                </a>
+                <button type="button" class="course-menu-item"
+                        onclick="closeAllCourseMenus(); openGroupModal('{{ c.id }}', '{{ c.title | escape }}', window.location.pathname, {{ c.group_id if c.group_id is not none else 'null' }})">
+                  <span>📁 Group / Semester…</span>
+                </button>
+                <button type="button" class="course-menu-item course-menu-item-danger"
+                        onclick="closeAllCourseMenus(); openDeleteModal('{{ c.id }}', '{{ c.title | escape }}')">
+                  <span>🗑 Delete course</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+          {% endif %}
         {% else %}
         <p style="font-size:.78rem;color:var(--ink-faint);padding:.3rem .6rem;margin:0;">No courses yet.</p>
         {% endfor %}
@@ -52,5 +125,158 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+
+<dialog id="delete-course-modal" class="reading-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 id="delete-modal-title" class="modal-title">Delete course</h3>
+      <button type="button" class="modal-close-btn" aria-label="Close" onclick="document.getElementById('delete-course-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="callout callout-error" style="margin-bottom: 1rem;">
+        <strong>Warning: This action is permanent and cannot be undone.</strong>
+      </div>
+      <p style="font-size: 0.9rem; color: var(--ink-soft); margin-bottom: 0.75rem;">
+        Deleting <strong id="delete-modal-course-name" style="color: var(--ink)">this course</strong> will permanently erase:
+      </p>
+      <ul class="modal-consequences-list">
+        <li>All curriculum topics, sequencing, and milestone goals</li>
+        <li>All Librarian source recommendations and reading shelf items</li>
+        <li>All Tutor session transcripts, question turns, and gap notes</li>
+        <li>All Editor milestone submissions and critique reviews</li>
+        <li>All Roommate insight connections generated for this course</li>
+        <li>All study activity log history and streak days for this course</li>
+      </ul>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-secondary" onclick="document.getElementById('delete-course-modal').close()">Cancel</button>
+      <form id="delete-course-form" method="post" action="" style="margin: 0;">
+        <button type="submit" class="btn btn-solid-danger">Delete Course Permanently</button>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="group-assign-modal" class="reading-modal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 class="modal-title">Group / Semester</h3>
+      <button type="button" class="modal-close-btn" aria-label="Close" onclick="document.getElementById('group-assign-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size: 0.9rem; color: var(--ink-soft); margin-bottom: 0.75rem;">
+        Move <strong id="group-assign-course-name" style="color: var(--ink)">this course</strong> to a group:
+      </p>
+      <form id="group-assign-form" method="post" action="">
+        <input type="hidden" name="next" id="group-assign-next" value="">
+        <div class="form-group">
+          <label for="group-assign-select">Group</label>
+          <select id="group-assign-select" name="group_id">
+            <option value="">— No group (individual course) —</option>
+            {% for g in all_groups() %}
+            <option value="{{ g.id }}">{{ g.name }}{% if g.timeframe_duration %} · {{ g.timeframe_duration }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('group-assign-modal').close()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+      <p class="form-hint">
+        Groups couple courses taken together (a semester, track, or cohort). The Roommate will
+        bridge ideas between courses in the same group. Create, rename, or delete groups on the
+        <a href="/groups">Groups page</a>.
+      </p>
+    </div>
+  </div>
+</dialog>
+
+<script>
+function toggleCourseMenu(e, menuId) {
+  e.stopPropagation();
+  e.preventDefault();
+  var menu = document.getElementById(menuId);
+  if (!menu) return;
+  var isVisible = menu.style.display === 'block';
+  closeAllCourseMenus();
+  if (!isVisible) {
+    menu.style.display = 'block';
+  }
+}
+
+function closeAllCourseMenus() {
+  var dropdowns = document.querySelectorAll('.course-menu-dropdown');
+  dropdowns.forEach(function(d) {
+    d.style.display = 'none';
+  });
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.course-menu-wrap')) {
+    closeAllCourseMenus();
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeAllCourseMenus();
+    var modal = document.getElementById('delete-course-modal');
+    if (modal && modal.open) {
+      modal.close();
+    }
+    var gModal = document.getElementById('group-assign-modal');
+    if (gModal && gModal.open) {
+      gModal.close();
+    }
+  }
+});
+
+function openDeleteModal(courseId, courseTitle) {
+  var modal = document.getElementById('delete-course-modal');
+  var titleEl = document.getElementById('delete-modal-course-name');
+  var form = document.getElementById('delete-course-form');
+  if (titleEl) {
+    titleEl.textContent = '“' + courseTitle + '”';
+  }
+  if (form) {
+    form.action = '/courses/' + courseId + '/delete';
+  }
+  if (modal) {
+    if (typeof modal.showModal === 'function') {
+      modal.showModal();
+    } else {
+      modal.setAttribute('open', '');
+    }
+  }
+}
+
+function openGroupModal(courseId, courseTitle, nextPath, currentGroupId) {
+  var modal = document.getElementById('group-assign-modal');
+  var form = document.getElementById('group-assign-form');
+  var nameEl = document.getElementById('group-assign-course-name');
+  var select = document.getElementById('group-assign-select');
+  var nextEl = document.getElementById('group-assign-next');
+  if (nameEl) {
+    nameEl.textContent = '“' + courseTitle + '”';
+  }
+  if (form) {
+    form.action = '/courses/' + courseId + '/group';
+  }
+  if (nextEl) {
+    nextEl.value = nextPath || '/';
+  }
+  if (select && currentGroupId) {
+    select.value = String(currentGroupId);
+  }
+  if (modal) {
+    if (typeof modal.showModal === 'function') {
+      modal.showModal();
+    } else {
+      modal.setAttribute('open', '');
+    }
+  }
+}
+</script>
 </body>
 </html>

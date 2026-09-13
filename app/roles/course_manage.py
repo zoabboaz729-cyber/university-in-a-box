@@ -62,3 +62,59 @@ def get_topic(topic_id: int) -> dict | None:
         if row is None:
             return None
         return dict(row)
+
+
+def delete_course(course_id: int) -> bool:
+    """Permanently delete a course and all associated data.
+
+    Removes topics, sources, tutor sessions, turns, editor reviews,
+    advisor interviews, roommate prompts, and activity log entries.
+    Returns False when the course is missing.
+    """
+    with get_connection() as conn:
+        course = conn.execute(
+            "SELECT id FROM courses WHERE id = ?", (course_id,)
+        ).fetchone()
+        if course is None:
+            return False
+        conn.execute(
+            "DELETE FROM tutor_turns WHERE session_id IN ("
+            "    SELECT s.id FROM tutor_sessions s "
+            "    JOIN topics t ON t.id = s.topic_id "
+            "    WHERE t.course_id = ?"
+            ")",
+            (course_id,),
+        )
+        conn.execute(
+            "DELETE FROM tutor_sessions WHERE topic_id IN ("
+            "    SELECT id FROM topics WHERE course_id = ?"
+            ")",
+            (course_id,),
+        )
+        conn.execute(
+            "DELETE FROM sources WHERE topic_id IN ("
+            "    SELECT id FROM topics WHERE course_id = ?"
+            ")",
+            (course_id,),
+        )
+        conn.execute(
+            "DELETE FROM editor_reviews WHERE topic_id IN ("
+            "    SELECT id FROM topics WHERE course_id = ?"
+            ")",
+            (course_id,),
+        )
+        conn.execute("DELETE FROM topics WHERE course_id = ?", (course_id,))
+        conn.execute("DELETE FROM advisor_interviews WHERE course_id = ?", (course_id,))
+        conn.execute("DELETE FROM roommate_prompts WHERE course_id = ?", (course_id,))
+        # Phase 11: other courses' intra-group prompts may point AT this
+        # course as the secondary peer — null the reference so the journal
+        # never shows a dangling bridge to a deleted course.
+        conn.execute(
+            "UPDATE roommate_prompts SET secondary_course_id = NULL "
+            "WHERE secondary_course_id = ?",
+            (course_id,),
+        )
+        conn.execute("DELETE FROM activity_log WHERE course_id = ?", (course_id,))
+        conn.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+    return True
+

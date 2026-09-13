@@ -11,8 +11,8 @@
   </p>
 </div>
 
-<form method="post" action="/courses/{{ course.id }}/status">
-  <div class="course-actions">
+<div class="course-actions" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+  <form method="post" action="/courses/{{ course.id }}/status" style="display:inline-flex;gap:0.5rem;align-items:center;margin:0;">
     {% if course.status == "active" %}
     <button class="btn btn-secondary" type="submit" name="status" value="paused"
             hx-include="this" hx-indicator="this">Pause</button>
@@ -30,8 +30,23 @@
     <button class="btn btn-secondary" type="submit" name="status" value="active"
             hx-include="this" hx-indicator="this">Reopen</button>
     {% endif %}
-  </div>
-</form>
+  </form>
+  <form method="post" action="/courses/{{ course.id }}/group"
+        style="display:inline-flex;align-items:center;gap:0.4rem;margin:0;">
+    <label for="course-group-select" style="font-size:0.8rem;margin:0;color:var(--ink-soft)">Group / Semester:</label>
+    <select id="course-group-select" name="group_id">
+      <option value="">— None —</option>
+      {% for g in all_groups() %}
+      <option value="{{ g.id }}" {% if course.group_id == g.id %}selected{% endif %}>{{ g.name }}{% if g.timeframe_duration %} · {{ g.timeframe_duration }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-secondary btn-sm" type="submit" name="next" value="/courses/{{ course.id }}">Move</button>
+  </form>
+  <button type="button" class="btn btn-outline-danger"
+          onclick="openDeleteModal('{{ course.id }}', '{{ course.title | escape }}')">
+    Delete course
+  </button>
+</div>
 
 {% if course.topics %}
 <h2>Topics</h2>

@@ -18,8 +18,8 @@
   {% for prompt in prompts %}
   <div class="prompt-card">
     <div class="prompt-meta">
-      <span class="prompt-field">💡 {{ prompt.field }}</span>
-      <span class="prompt-course">Course: {{ prompt.course_title }}</span>
+      <span class="prompt-field">{% if prompt.connection_type == 'intra_group' %}🪞 {% else %}💡 {% endif %}{{ prompt.field }}</span>
+      <span class="prompt-course">Course: {{ prompt.course_title }}{% if prompt.secondary_course_title %} ↔ {{ prompt.secondary_course_title }}{% endif %}</span>
       <span class="prompt-date">{{ prompt.created_at }}</span>
     </div>
     <p class="prompt-text">{{ prompt.prompt_text }}</p>

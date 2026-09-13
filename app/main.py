@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db
 from app.monitor import get_logger, setup_logging
-from app.roles.dashboard import list_dashboard_courses
+from app.roles import group_store
 from app.routes.advisor import router as advisor_router
 from app.routes.advisor import templates as advisor_templates
 from app.routes.courses import router as courses_router
@@ -22,6 +22,8 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.dashboard import templates as dashboard_templates
 from app.routes.editor import router as editor_router
 from app.routes.editor import templates as editor_templates
+from app.routes.groups import router as groups_router
+from app.routes.groups import templates as groups_templates
 from app.routes.librarian import router as librarian_router
 from app.routes.librarian import templates as librarian_templates
 from app.routes.roommate import router as roommate_router
@@ -65,6 +67,7 @@ api.include_router(dashboard_router)
 api.include_router(advisor_router)
 api.include_router(courses_router)
 api.include_router(editor_router)
+api.include_router(groups_router)
 api.include_router(librarian_router)
 api.include_router(roommate_router)
 api.include_router(settings_router)
@@ -76,13 +79,19 @@ app = api
 # Inject sidebar_courses as a Jinja2 env global into every router's
 # Templates instance so base.html can render the persistent sidebar course
 # list without each route handler passing it explicitly.
-# list_dashboard_courses is called at render time → always reads live DB.
+# sidebar_groups is called at render time → always reads live DB. It is
+# the Phase 11 replacement for sidebar_courses: a structured list of
+# group blocks ({"group": {...}|None, "courses": [...]}) so the sidebar
+# can render collapsible Semester folders with zero route churn.
+# all_groups feeds every "move to group" dropdown (the 3-dots menu modal,
+# the course page select, the /groups page).
 for _templates in (
     advisor_templates, courses_templates, dashboard_templates,
-    editor_templates, librarian_templates, roommate_templates,
-    settings_templates, tutor_templates,
+    editor_templates, groups_templates, librarian_templates,
+    roommate_templates, settings_templates, tutor_templates,
 ):
-    _templates.env.globals["sidebar_courses"] = list_dashboard_courses
+    _templates.env.globals["sidebar_groups"] = group_store.sidebar_groups
+    _templates.env.globals["all_groups"] = group_store.list_groups
 
 # Registers review handlers onto the advisor router (import for side
 # effects; split out of advisor.py only to keep files short per constraints).

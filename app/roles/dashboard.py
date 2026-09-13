@@ -20,13 +20,25 @@ from app.roles.tutor_store import last_gap_for_course
 LIST_STATUSES = ("active", "paused", "archived", "done")
 
 
-def list_dashboard_courses() -> list[dict]:
-    """All non-draft courses, newest first, with resume pointers."""
+def list_dashboard_courses(group_id: int | None = None,
+                           ungrouped_only: bool = False) -> list[dict]:
+    """All non-draft courses, newest first, with resume pointers.
+
+    Phase 11: `group_id` narrows to one Course Group; `ungrouped_only`
+    returns only courses in no group. Both filters are optional and
+    combine naturally with the Phase 2 behavior.
+    """
     with get_connection() as conn:
-        course_rows = conn.execute(
-            "SELECT id, title, status, created_at FROM courses "
-            "WHERE status != 'draft' ORDER BY id DESC"
-        ).fetchall()
+        base_sql = ("SELECT id, title, status, created_at, group_id "
+                    "FROM courses WHERE status != 'draft'")
+        params = []
+        if ungrouped_only:
+            base_sql += " AND group_id IS NULL"
+        elif group_id is not None:
+            base_sql += " AND group_id = ?"
+            params.append(group_id)
+        base_sql += " ORDER BY id DESC"
+        course_rows = conn.execute(base_sql, params).fetchall()
         result = []
         for course in course_rows:
             course_id = course["id"]

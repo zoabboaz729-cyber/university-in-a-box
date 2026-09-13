@@ -30,6 +30,9 @@ right about current status; fix the disagreement the same session you notice it.
 | | | README backup commands, template empty states as before. |
 | 8 — Verification & docs finalization | Done | 2026-09-12: owner-verified frontend walkthrough recorded in progress.md; regression loop automated (`tests/test_regression_loop.py`); final pre-commit suite **133 passed** (2 warnings, 15.18s); git init + initial commit **"v0.5: The initial application"** (99 files; clean status; no `.env`/`*.db`/`.venv/` tracked), pushed to the private GitHub remote. |
 | 9 — Frontend Redesign ("The Reading Room") | Done | 2026-09-13: Implemented full design system (Direction A — The Reading Room): hand-crafted CSS token stylesheet (`app/static/style.css`), self-hosted Google Fonts (`Source Serif 4` + `Inter` woff2 in `app/static/fonts/`), self-hosted `htmx.min.js` (2.0.4), persistent sidebar with live courses list on all pages, animated loading/thinking indicators for LLM calls, dead Bootstrap classes removed, mojibake lightbulb fixed, and Tutor dead-end bug resolved with `POST /tutor/{id}/retry`. Full suite: **134 passed** (100%). |
+| 10 — Course Deletion & Context Menus | Done | 2026-09-13: Atomic cascading deletion across all 8 related tables (`delete_course` in `app/roles/course_manage.py`, route `POST /courses/{id}/delete`), universal 3-dots context menu on sidebar and dashboard course cards, consequence warning `<dialog>` modal in `base.html`, explicit Delete button on `/courses/{id}`, Roommate `latest_prompt` fallback, and full test suite: **139 passed** (100%). |
+| 11 — Course Groups / Semesters & Multi-Course Insights | Done | 2026-09-13: `course_groups` table + `group_id` on `courses` (idempotent `_migrate()` in `app/db.py`), `app/roles/group_store.py` (create/update/delete with D-022 Option B, assignment, `sidebar_groups()`), `app/routes/groups.py` (`GET /groups`, create/update/delete, `POST /courses/{id}/group` for the 3-dots menu), `templates/groups.html` management page, collapsible group folders in the sidebar + dashboard filters, intra-group Roommate synthesis (`roommate_intra.md` prompt, `secondary_course_id` + `connection_type` on `roommate_prompts`), and `delete_course` nulls secondary references. Full suite: **160 passed** (100%). |
+
 
 Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
 
@@ -53,7 +56,46 @@ Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
   one-line reason persisted to sources; full list keeps skip rows dimmed,
   Shelf view filters keep-only; provider/parse errors render inline with
   nothing half-written; each add logs to activity_log; restart-safe.
-- Tests: `python -m pytest -q` → 134 tests as of 2026-09-13 (133 from Phase 8 + 1 new test for Tutor retry `POST /tutor/{id}/retry`; 100% pass rate).
+- Tests: `python -m pytest -q` → 160 tests as of 2026-09-13 (5 in `tests/test_course_delete.py` + 21 in `tests/test_groups.py`; 100% pass rate).
+- Phase 10 (Course Deletion & Context Menus): courses can be permanently deleted
+  via `POST /courses/{id}/delete` and `delete_course()` in `course_manage.py`.
+  Deletion cascades atomically across all 8 related tables (`topics`, `sources`,
+  `tutor_sessions`, `tutor_turns`, `editor_reviews`, `advisor_interviews`,
+  `roommate_prompts`, and `activity_log`) with zero dangling rows or phantom streaks.
+  Every course in the persistent sidebar and dashboard features an accessible
+  3-dots (`⋮`) context menu; course page includes an explicit "Delete course"
+  action; deletion is guarded by a Reading Room consequence `<dialog>` modal
+  warning the user that curriculum topics, librarian shelf, tutor history,
+  editor critiques, and insights will be erased; `latest_prompt()` falls back
+  seamlessly to remaining courses; direct URLs return friendly 404 pages.
+- Phase 11 (Course Groups / Semesters & Multi-Course Insights): a Course Group
+  ("Semester 1", a track, a cohort) couples related courses. Schema:
+  `course_groups` (name, description, `timeframe_mode` 'individual'|'uniform',
+  `timeframe_duration`, `status`) + `courses.group_id` (NULL = ungrouped) —
+  added by the idempotent `_migrate()` so existing DBs evolve on next boot.
+  Data layer `app/roles/group_store.py` (P8: thin explicit SQL) with live
+  progress aggregates (course/topic counts incl. done-topics per group);
+  timeframe default is 'individual' (D-022 Option A: each course keeps its
+  own per-topic time_box pacing; 'uniform' only displays a shared declared
+  duration — no fabricated week-math). Routes `app/routes/groups.py`:
+  `GET /groups` management page (`templates/groups.html`) to create groups
+  (optionally filing checked courses), edit name/description/timeframe/status,
+  move courses, and delete a group with D-022 Option B — an explicit choice
+  between "Ungroup courses" (courses preserved, group_id → NULL) and
+  "Delete group and all its courses" (each course through the atomic
+  `delete_course` cascade, then the group row). Assignment is also reachable
+  from every course's 3-dots menu and the course page via
+  `POST /courses/{course_id}/group` (validated; logs to activity_log;
+  safe same-site `next` redirect). Sidebar renders collapsible group folders
+  via `sidebar_groups()` (0-course groups skipped; no groups at all looks
+  exactly like pre-Phase 11); dashboard supports group filters
+  (`list_dashboard_courses(group_id=…, ungrouped_only=True)`). Roommate (P5)
+  gains intra-group synthesis: when two active courses share a group, prompts
+  can bridge topic-to-topic across them (`app/roles/prompts/roommate_intra.md`),
+  persisted with `secondary_course_id` + `connection_type`
+  ('external'|'intra_group') and reactive in the journal like external prompts;
+  `delete_course` nulls other courses' `secondary_course_id` references so no
+  dangling bridge survives. New tests: `tests/test_groups.py` (21).
 - Phase 7 completion items:masked API key reads `AI_API_KEY` via
   `load_config()` (regression: it once read a bogus `OPENROUTER_API_KEY` and
   always showed "(not set)"); cadence (validated ≥ 1 day) + per-course pause

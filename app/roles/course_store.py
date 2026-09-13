@@ -73,16 +73,28 @@ def confirm_curriculum(course_id: int, course_title: str, topics: list, answers:
 
 
 def get_course(course_id: int) -> dict | None:
-    """Return {"id", "title", "status", "topics": [...]} or None.
+    """Return {"id", "title", "status", "group_id", "group_title",
+    "topics": [...]} or None.
 
-    Topics come back already ordered by order_index.
+    Topics come back already ordered by order_index. Phase 11 adds the
+    Course Group membership (id + name) so the course page can show and
+    change it in one place.
     """
     with get_connection() as conn:
         course = conn.execute(
-            "SELECT id, title, status FROM courses WHERE id = ?", (course_id,)
+            "SELECT id, title, status, group_id FROM courses WHERE id = ?",
+            (course_id,),
         ).fetchone()
         if course is None:
             return None
+        group_title = None
+        if course["group_id"] is not None:
+            group_row = conn.execute(
+                "SELECT name FROM course_groups WHERE id = ?",
+                (course["group_id"],),
+            ).fetchone()
+            if group_row is not None:
+                group_title = group_row["name"]
         rows = conn.execute(
             "SELECT id, title, milestone_description, time_box, status "
             "FROM topics WHERE course_id = ? ORDER BY order_index",
@@ -92,6 +104,8 @@ def get_course(course_id: int) -> dict | None:
         "id": course["id"],
         "title": course["title"],
         "status": course["status"],
+        "group_id": course["group_id"],
+        "group_title": group_title,
         "topics": [
             {
                 "id": row["id"],

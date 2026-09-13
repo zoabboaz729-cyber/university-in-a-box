@@ -230,8 +230,54 @@ recorded, and no doc contradicts the running app.
 
 ---
 
-## After Phase 8
-The product is "done" in the sense of complete-and-usable, not finished forever. Future
-work (multi-topic Roommate cross-linking, spaced-repetition on gap notes, export/print of a
-Course, etc.) should be proposed as new phases appended here, each following the same Goal /
-Why / Steps / Constraints / Definition of Done shape — never bolted on without a plan.
+## Phase 9 — Frontend redesign ("The Reading Room")
+**Goal:** Comprehensive visual and interaction overhaul using "The Reading Room" aesthetic (warm paper, serif headlines, durable sidebar, HTMX responsive interactions).
+
+**Why:** P6, P7 — A serious daily self-study workspace should feel like a quiet, intentional reading library rather than a generic web dashboard.
+
+**Steps:**
+1. Hand-crafted CSS design tokens (`app/static/style.css`) with palette, typography, and card primitives.
+2. Self-hosted offline Google Fonts (`Source Serif 4` and `Inter` woff2).
+3. Self-hosted `htmx.min.js` (2.0.4) for loading indicators and inline UI.
+4. Persistent sidebar with dynamic course list on every page.
+5. Socratic tutor retry endpoint `POST /tutor/{id}/retry` and unhandled bug fix.
+
+**Definition of Done:** All 11 templates modernized, offline-ready, 100% test pass rate.
+
+---
+
+## Phase 10 — Course deletion & contextual management
+**Goal:** Ability to safely and permanently delete a Course and its associated records with full user agency, consequence warnings, and universal 3-dots context menus.
+
+**Why:** P7 (User agency) — Users exploring the app with test/sample courses need the agency to delete them without leaving orphan data or ghost stats; P6 (Durability) — Database integrity must be maintained atomically.
+
+**Steps:**
+1. Implement `delete_course(course_id)` in `app/roles/course_manage.py` with an atomic SQLite transaction deleting turns, tutor sessions, sources, editor reviews, topics, interviews, roommate prompts, activity logs, and the course.
+2. Route `POST /courses/{course_id}/delete` with safe redirect.
+3. Universal 3-dots (`⋮`) context menu on every course in the persistent sidebar and dashboard.
+4. Consequence warning `<dialog>` modal explaining exactly what will be permanently erased.
+5. Explicit "Delete course" action on `/courses/{id}`.
+6. Dependent module adaptation: Roommate `latest_prompt()` fallback, streak recalculation, and 404 responses.
+
+**Definition of Done:** Deletion cleans all 8 child tables atomically; modal requires explicit confirmation; full regression suite green with dedicated deletion tests.
+
+---
+
+## Phase 11 — Course Groups / Semesters & multi-course insights
+**Goal:** Enable coupling related courses into Groups (e.g. "Semester 1", "Computer Systems Track") with customizable timeframe synchronization and intra-group Roommate cross-course synthesis.
+
+**Why:** P5 (Range is deliberately engineered) & P1 (Personalization) — Students learn in cohorts or semesters; connecting concepts across concurrent courses elevates understanding and reduces scheduling friction.
+
+**Steps:**
+1. Database migration: `course_groups` table with `timeframe_mode` ('individual' vs 'uniform') and `group_id` foreign key on `courses`.
+2. Group management data access layer and routes: create, edit, assign courses, delete group (Option B: choice between ungrouping courses vs deleting courses).
+3. Timeframe synchronization: support uniform semester pacing or individual course pacing (Option A default).
+4. Roommate intra-group synthesis: generate cross-course connection prompts bridging two active courses in the same group.
+5. Sidebar and dashboard group headers, collapsible course trees, and collective progress tracking.
+
+**Definition of Done:** Group CRUD operational, courses can be grouped/ungrouped, uniform or individual pacing honored, and Roommate generates cross-course connections when courses share an active group.
+
+---
+
+## After Phase 11
+The product remains extensible. Future work (spaced-repetition on gap notes, export/print of a Course, exam simulation) should continue to be proposed as new phases appended here.

@@ -13,7 +13,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from app.roles.course_manage import get_topic, set_course_status, set_topic_status
+from app.roles.course_manage import (
+    delete_course,
+    get_topic,
+    set_course_status,
+    set_topic_status,
+)
 from app.roles.course_store import get_course
 from app.roles.review_store import has_editor_review, list_reviews_for_topic
 from app.roles.source_store import list_sources
@@ -52,7 +57,8 @@ def course_view(request: Request, course_id: int):
     if course is None:
         return _not_found(request, "Course not found. It may have been deleted.")
     return templates.TemplateResponse(
-        request, "course.html", {"course": course}
+        request, "course.html",
+        {"course": course},
     )
 
 
@@ -66,6 +72,13 @@ def course_status(course_id: int, status: str = Form(...)):
     if not ok:
         return RedirectResponse("/", status_code=303)
     return RedirectResponse(f"/courses/{course_id}", status_code=303)
+
+
+@router.post("/courses/{course_id}/delete")
+def course_delete(course_id: int):
+    delete_course(course_id)
+    return RedirectResponse("/", status_code=303)
+
 
 
 @router.get("/topics/{topic_id}", response_class=HTMLResponse)

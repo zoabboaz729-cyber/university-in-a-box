@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Groups — University in a Box{% endblock %}
+
+{% block content %}
+<a class="back-link" href="/">Dashboard</a>
+
+<div class="page-head">
+  <h1>Groups & semesters</h1>
+  <p class="subtitle">Couple courses that belong together — a semester, a track, a cohort. Courses in the same group run on one pace or their own, and the Roommate bridges ideas between them.</p>
+</div>
+
+{% if error %}
+<div class="callout callout-error">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+
+<div class="settings-section">
+  <h2>Create a group</h2>
+  <form method="post" action="/groups/create">
+    <div class="form-group">
+      <label for="group-name">Group name</label>
+      <input type="text" id="group-name" name="name" required placeholder="Semester 1: Systems &amp; Software">
+    </div>
+    <div class="form-group">
+      <label for="group-desc">Description (optional)</label>
+      <input type="text" id="group-desc" name="description" placeholder="The core systems semester">
+    </div>
+    <fieldset class="form-fieldset">
+      <legend>Timeframe</legend>
+      <label class="checkbox-label">
+        <input type="radio" name="timeframe_mode" value="individual" checked>
+        <span><strong>Individual pacing</strong> — each course keeps its own time boxes (default).</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="radio" name="timeframe_mode" value="uniform">
+        <span><strong>Shared semester timeframe</strong> — one duration spans the whole group.</span>
+      </label>
+      <div class="form-group" style="margin-top:0.5rem">
+        <label for="group-duration">Semester duration (used when the timeframe is shared, e.g. "12 weeks", "Sept 1 – Dec 15")</label>
+        <input type="text" id="group-duration" name="timeframe_duration" placeholder="12 weeks">
+      </div>
+    </fieldset>
+    <div class="form-group">
+      <label for="group-courses">Add courses now (optional — Ctrl/Cmd-click to select several)</label>
+      {% if all_courses %}
+      <select id="group-courses" name="course_ids" multiple size="4">
+        {% for c in all_courses %}
+        <option value="{{ c.id }}">{{ c.title }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <p class="form-hint">No courses yet — create the group first, then move courses into it from their ⋮ menus.</p>
+      {% endif %}
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Create group</button>
+    </div>
+  </form>
+</div>
+
+{% for block in groups %}
+<div class="group-card">
+  <div class="group-card-head">
+    <h3 class="group-card-title">{{ block.group.name }}</h3>
+    <span class="pill gold">{{ block.group.timeframe_mode }}</span>
+    {% if block.group.timeframe_duration %}<span class="pill">{{ block.group.timeframe_duration }}</span>{% endif %}
+    <span class="pill {{ block.group.status }}">{{ block.group.status }}</span>
+  </div>
+  {% if block.group.description %}
+  <p class="group-card-meta">{{ block.group.description }}</p>
+  {% endif %}
+  <p class="group-card-meta">
+    {{ block.group.done_topics }} of {{ block.group.total_topics }} topics completed
+    ({{ ((block.group.done_topics / block.group.total_topics * 100) | int) if block.group.total_topics > 0 else 0 }}%)
+    &middot; {{ block.courses | length }} course{{ "s" if block.courses | length != 1 else "" }}
+  </p>
+  <div class="group-card-progress">
+    <div class="prog-bar"><span style="width:{{ ((block.group.done_topics / block.group.total_topics * 100) | int) if block.group.total_topics > 0 else 0 }}%"></span></div>
+  </div>
+
+  {% if block.courses %}
+  <div class="group-course-list">
+    {% for rc in block.courses %}
+    <div class="group-course-item">
+      <a class="group-course-title" href="/courses/{{ rc.id }}">{{ rc.title }}</a>
+      <span class="pill {{ rc.status }}">{{ rc.status }}</span>
+      <form method="post" action="/courses/{{ rc.id }}/group" style="display:inline;margin:0">
+        <input type="hidden" name="next" value="/groups">
+        <button class="menu-inline-btn" type="submit" name="group_id" value="">✕ Remove from group</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="group-card-empty">No courses in this group yet.</p>
+  {% endif %}
+
+  <details class="group-edit">
+    <summary>Edit group</summary>
+    <form method="post" action="/groups/{{ block.group.id }}/update">
+      <div class="form-group">
+        <label for="edit-name-{{ block.group.id }}">Group name</label>
+        <input type="text" id="edit-name-{{ block.group.id }}" name="name" required value="{{ block.group.name }}">
+      </div>
+      <div class="form-group">
+        <label for="edit-desc-{{ block.group.id }}">Description</label>
+        <input type="text" id="edit-desc-{{ block.group.id }}" name="description" value="{{ block.group.description or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="edit-mode-{{ block.group.id }}">Timeframe mode</label>
+        <select id="edit-mode-{{ block.group.id }}" name="timeframe_mode">
+          <option value="individual" {% if block.group.timeframe_mode == 'individual' %}selected{% endif %}>Individual pacing</option>
+          <option value="uniform" {% if block.group.timeframe_mode == 'uniform' %}selected{% endif %}>Shared semester timeframe</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="edit-duration-{{ block.group.id }}">Semester duration</label>
+        <input type="text" id="edit-duration-{{ block.group.id }}" name="timeframe_duration" value="{{ block.group.timeframe_duration or '' }}" placeholder="12 weeks">
+      </div>
+      <div class="form-group">
+        <label for="edit-status-{{ block.group.id }}">Status</label>
+        <select id="edit-status-{{ block.group.id }}" name="status">
+          {% for s in ["active", "completed", "archived"] %}
+          <option value="{{ s }}" {% if block.group.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm" type="submit">Save group</button>
+      </div>
+    </form>
+  </details>
+
+  <details class="group-edit">
+    <summary class="danger-summary">Delete this group</summary>
+    <div class="callout callout-error" style="margin-top:0.5rem">
+      <strong>Warning: deleting a group is final.</strong> Choose what happens to its courses:
+    </div>
+    <form method="post" action="/groups/{{ block.group.id }}/delete">
+      <button class="btn btn-secondary btn-sm" type="submit" name="action" value="ungroup">
+        Ungroup its {{ block.courses | length }} course{{ "s" if block.courses | length != 1 else "" }} (keep all course data)
+      </button>
+      <button class="btn btn-solid-danger btn-sm" type="submit" name="action" value="delete_courses">
+        Delete group and all its courses permanently
+      </button>
+    </form>
+  </details>
+</div>
+{% else %}
+<div class="callout callout-info">No groups yet — create one above.</div>
+{% endfor %}
+
+<div class="settings-section">
+  <h2>Ungrouped courses</h2>
+  {% if ungrouped %}
+  <div class="group-course-list">
+    {% for c in ungrouped %}
+    <div class="group-course-item">
+      <a class="group-course-title" href="/courses/{{ c.id }}">{{ c.title }}</a>
+      <span class="pill {{ c.status }}">{{ c.status }}</span>
+      <form method="post" action="/courses/{{ c.id }}/group" style="display:inline;margin:0">
+        <input type="hidden" name="next" value="/groups">
+        <select name="group_id" class="group-move-select" aria-label="Move course to group">
+          <option value="">— Move to a group —</option>
+          {% for g in all_groups() %}
+          <option value="{{ g.id }}">{{ g.name }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-secondary btn-sm" type="submit">Move</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="form-hint">Every course is filed into a group — or there are no courses yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

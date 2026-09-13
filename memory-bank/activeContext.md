@@ -5,15 +5,46 @@ any coding-agent session should read — it should be enough, on its own, to kno
 where the project stands and what to do next.**
 
 ## Current state
-**2026-09-13 (Phase 9 Frontend Redesign session): FULL REDESIGN COMPLETED & VERIFIED.**
-All requirements approved in the implementation plan have been executed:
-1. **Design System**: Hand-crafted CSS design tokens (`app/static/style.css`) implementing **Direction A — The Reading Room** (warm paper tones, responsive grid, card and pill components, progress bars).
-2. **Offline Local-First Fonts**: Self-hosted Google Fonts (`Source Serif 4` and `Inter` woff2 files in `app/static/fonts/`).
-3. **HTMX & Loading States**: Self-hosted `htmx.min.js` (2.0.4) in `app/static/`. Buttons disable immediately on submit, preventing duplicate submissions, and display animated pulsing "thinking" indicators (`.dots i`) during LLM calls.
-4. **Tutor Dead-End Bug Fixed**: Resolved with new endpoint `POST /tutor/{session_id}/retry` in `app/routes/tutor.py` and a "Try again" action button on `tutor_session.html`.
-5. **Persistent Navigation**: Sidebar shell in `base.html` permanently displays all user courses and real-time progress on every page via a clean Jinja2 global helper `sidebar_courses`.
-6. **All 11 Templates Modernized**: Dead Bootstrap classes stripped, layout modernized, and the mojibake `ðŸ’¡` byte sequence fixed to valid UTF-8 `💡`.
-7. **Test Suite**: **134 passed, 2 warnings in 15.90s** (100% pass rate). Fully backward-compatible with all existing contracts.
+**2026-09-13 (Phase 11 Course Groups / Semesters session): COMPLETED & VERIFIED.**
+Full suite: **160 passed, 2 warnings in 22.66s** (21 new tests in
+`tests/test_groups.py`; 100% pass rate, zero regressions). What was built:
+1. **Schema** (`app/schema.sql` + `app/db.py::_migrate()`): `course_groups`
+   table (name, description, `timeframe_mode` 'individual'|'uniform',
+   `timeframe_duration`, `status`), `courses.group_id` (NULL = ungrouped),
+   and `roommate_prompts.secondary_course_id` + `connection_type`
+   ('external'|'intra_group') — all idempotent, existing DBs evolve on boot.
+2. **Data layer** `app/roles/group_store.py`: create/get/list/update groups
+   with live progress aggregates; `set_course_group` (validated, logged);
+   `delete_group` implementing **D-022 Option B** (`mode='ungroup'` detaches
+   courses; `mode='delete_courses'` runs each through the atomic
+   `delete_course` cascade); `sidebar_groups()` for collapsible nav.
+3. **Routes** `app/routes/groups.py` + **page** `templates/groups.html`:
+   `GET /groups` manage page (create with optional course filing, edit,
+   delete with the Option-B choice form), plus
+   `POST /courses/{course_id}/group` reachable from every 3-dots menu and
+   the course page (safe same-site `next` redirect).
+4. **UI**: sidebar renders collapsible group folders with per-course
+   progress (dashboard/index filters by group); course page shows + changes
+   group membership; Reading Room tokens throughout (`style.css` additions).
+5. **Roommate intra-group synthesis (P5)**: `app/roles/roommate.py` +
+   `app/roles/prompts/roommate_intra.md` generate topic-to-topic bridge
+   prompts between two active courses sharing a group, journaled and
+   reactive like external prompts; `delete_course` nulls dangling
+   `secondary_course_id` references.
+6. Owner design calls (D-022): group deletion = Option B (explicit choice);
+   timeframe default = Option A ('individual' pacing, optional 'uniform').
+
+**2026-09-13 (Phase 10 Course Deletion & Context Menus session): COMPLETED & VERIFIED.**
+All requirements for course deletion and contextual actions have been executed and tested:
+1. **Atomic Cascading Deletion**: Implemented `delete_course(course_id)` in `app/roles/course_manage.py` running an atomic transaction across all 8 related tables (`topics`, `sources`, `tutor_sessions`, `tutor_turns`, `editor_reviews`, `advisor_interviews`, `roommate_prompts`, and `activity_log`) ensuring zero orphaned rows.
+2. **Deletion Endpoint**: Handled via `POST /courses/{course_id}/delete` in `app/routes/courses.py` with safe HTTP 303 redirect to `/`.
+3. **Universal 3-Dots Menu (`⋮`)**: Integrated on every course row in the persistent sidebar (`base.html`) and dashboard (`index.html`), allowing fast access to "Open course" and "Delete course".
+4. **Consequences Warning Modal**: Accessible `<dialog id="delete-course-modal">` in `base.html` styled with Reading Room tokens (`--paper-card`, `--danger`), explicitly enumerating all consequences with Cancel (zero side-effect) and Confirm Delete buttons.
+5. **Course Page Delete Action**: Added explicit "Delete course" action button on `/courses/{id}`.
+6. **State & Dependent System Adaptation**: Roommate `latest_prompt()` cleanly falls back to remaining active courses (or None); dashboard recalculates active counts and streak days; direct URLs return friendly 404 pages.
+7. **Test Suite**: **139 passed, 2 warnings in 21.83s** (5 new unit & integration tests covering cascade, routes, fallback, and UI elements; 100% pass rate).
+
+Phase 9 (Frontend Redesign session): **FULL REDESIGN COMPLETED & VERIFIED (Direction A — The Reading Room).**
 
 Phase 8 is **DONE (2026-09-12, prior session)**. Final steps, in order:
 1. The owner manually walked the entire frontend and confirmed every workflow
@@ -67,22 +98,27 @@ background jobs: 14/14 new-slice tests, then the full 130).
    (2 warnings, 15.18s); this file + progress.md closed out.
 
 ## Current phase
-## Current phase
-**Phase 8 is DONE.** The initial commit (message "v0.5: The initial
-application", 99 files) exists on `master`, is pushed to the private GitHub
-remote, and has a clean status with no secrets/DB/venv tracked. Any new work
-must be proposed as a new phase appended to `docs/03-BUILD-PLAN.md` per its
-"After Phase 8" section.
+**Phase 11 is DONE.** Course Groups/Semesters: schema, group CRUD with the
+D-022 Option-B deletion choice, timeframe modes (individual default /
+uniform display), sidebar group folders + dashboard filters, and
+intra-group Roommate synthesis — all implemented and backed by tests
+(160 passed; see progress.md Phase 11 row for the component map).
 
 ## Next step
-**Owner:** create an empty repo on GitHub (no README/.gitignore/license —
-the repo already has them), then:
-```
-git branch -M main
-git remote add origin https://github.com/<you>/university-in-a-box.git
-git push -u origin main
-```
-After the push, any new work needs its own plan per BUILD-PLAN "After Phase
+No build-plan phase remains. Recommended next actions, in order:
+1. **Owner manual walkthrough of the Groups UI** (same as the Phase 8
+   ritual): create a group, file courses from the 3-dots menu, toggle
+   timeframe mode, delete a group both ways, and check the sidebar/dashboard
+   render — then record the result in progress.md's walkthrough section.
+2. **Commit Phase 10 + Phase 11** (both are uncommitted on top of
+   "v0.5: The initial application"; `git status` currently shows the
+   modified core files + new `group_store.py`, `groups.py`, `groups.html`,
+   `roommate_intra.md`, `tests/test_groups.py`, `tests/test_course_delete.py`).
+3. Propose the next phase by appending to `docs/03-BUILD-PLAN.md`
+   ("After Phase 11" section): candidates already on file — multi-topic
+   Roommate cross-linking depth, spaced repetition on gap notes,
+   export/print of a Course, exam simulation.
+
 8" (e.g. multi-topic Roommate cross-linking, spaced repetition on gap notes,
 export/print of a Course).
 
