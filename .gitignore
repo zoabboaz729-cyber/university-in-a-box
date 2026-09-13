@@ -1,0 +1,16 @@
+.env
+.venv/
+.vscode/
+__pycache__/
+*.pyc
+*.db
+*.log
+.pytest_cache/
+pytest_*.txt
+
+# DB backups taken by the backup routine (data/university.db.backup-*)
+data/university.db.backup-*
+
+# Owner personal scratch notes — not project files
+.free_models.txt
+.piplist.txt

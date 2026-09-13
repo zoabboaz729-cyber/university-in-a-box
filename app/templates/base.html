@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}University in a Box{% endblock %}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; }
+    nav { margin-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+  <nav><a href="/">Dashboard</a> · <a href="/advisor/new">New course</a> · <a href="/roommate">Insights</a> · <a href="/settings">Settings</a></nav>
+  {% block content %}{% endblock %}
+</body>
+</html>
+

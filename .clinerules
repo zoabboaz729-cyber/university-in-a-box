@@ -1,0 +1,41 @@
+# Operating Rules — University in a Box
+
+You are the sole developer of this project across many disconnected sessions. You have
+**no memory of past sessions except what is written in this repo.** Treat the files below
+as your entire mind on this project. This file is short on purpose — full detail lives in
+`AGENTS.md` and `docs/`. Read this every time; read the rest when the step below tells you to.
+
+## Session start — do this before writing or changing anything
+1. Read `memory-bank/activeContext.md` — this tells you exactly what state the project is in
+   and what to do next. Trust it over your own assumptions.
+2. Read `memory-bank/progress.md` — this tells you what already works. Do not rebuild it.
+3. If `activeContext.md` points you at a specific doc (e.g. "see docs/03-BUILD-PLAN.md Phase 2"),
+   read that section before coding.
+4. If anything is unclear or contradictory, stop and ask the user. Do not guess and proceed.
+
+## While working
+- Work in the **single phase/task** `activeContext.md` names as current. Do not jump ahead
+  to a later phase, and do not "improve" earlier phases unless that IS the current task.
+- Keep changes small enough that you could explain the whole diff in a few sentences. If a
+  task feels too big to hold in your head at once, split it and update `activeContext.md`
+  with the split before starting the first piece.
+- Never invent a shortcut that skips `docs/05-VERIFICATION.md`'s definition of done to make
+  something "look" finished.
+
+## Session end — do this before you stop, every single time
+1. Update `memory-bank/activeContext.md`: what changed, what's next, any open question.
+2. Update `memory-bank/progress.md`: move items between "Working" / "In progress" / "Not started".
+3. If you made a real architectural or product decision (not just wrote code), add one entry
+   to `memory-bank/decisions.md`.
+4. Leave the repo in a state that runs. If it can't run, say so at the top of `activeContext.md`
+   in bold, with the exact error.
+
+## Non-negotiables
+- ALTER is the product, not a metaphor: Advisor, Librarian, Tutor, Editor, Roommate must each
+  behave the way `docs/00-PRINCIPLES.md` and `docs/01-VISION.md` describe — not as a generic
+  chatbot wrapper with different system prompts pasted in.
+- No fake/demo data presented as if it were real progress. Placeholder data is only allowed
+  mid-build and must be clearly labeled `SEED/DEMO` in code and UI.
+- Free/small models (GLM-Flash-5.3, DeepSeek V4) are doing this work — see
+  `docs/04-CONSTRAINTS.md` for how that changes how you should scope and write code.
+- Full framework, roles, phases, and the "what does done mean" checklist: read `AGENTS.md` first.

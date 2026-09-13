@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Settings — University in a Box{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+
+{% if error %}
+<div class="alert alert-danger" role="alert">
+  <strong>Error:</strong> {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/settings">
+  <section>
+    <h2>AI Provider</h2>
+    <p>
+      <strong>API Key:</strong> {{ settings.api_key_masked }}
+      <br>
+      <em>For security, the full key is not displayed. To change it, edit your
+      <code>.env</code> file and restart the app.</em>
+    </p>
+  </section>
+
+  <section>
+    <h2>Roommate Cadence</h2>
+    <p>How often should the Roommate generate a cross-domain prompt for each active course?</p>
+    <label for="cadence_days">
+      Days between prompts (minimum 1):
+      <input type="number" id="cadence_days" name="cadence_days" value="{{ settings.cadence_days }}" min="1" required>
+    </label>
+    <p class="text-muted small">
+      Default: {{ default_cadence }} days. The Roommate checks for due prompts on every dashboard load.
+      Changes are saved to your <code>.env</code> file, so they survive a restart.
+    </p>
+  </section>
+
+  <section>
+    <h2>Per-Course Defaults</h2>
+    <p>
+      <label>
+        <input type="checkbox" name="new_courses_start_paused" {% if settings.new_courses_start_paused %}checked{% endif %}>
+        Start new courses paused by default
+      </label>
+      <br>
+      <span class="text-muted small">New Courses confirmed through the Advisor start as
+      <code>paused</code> and appear on the dashboard that way — you unpause them when ready.</span>
+    </p>
+  </section>
+
+  <button type="submit">Save settings</button>
+</form>
+
+<section>
+  <h2>Backup</h2>
+  <p>Your entire learning history lives in one file: <code>{{ db_path }}</code>.</p>
+  {% if backup.exists %}
+  <p>Newest backup: <code>{{ backup.name }}</code>
+    ({{ backup.age_days }} day{{ "s" if backup.age_days != 1 else "" }} ago).</p>
+  {% else %}
+  <p><strong>No backup found in the data folder yet.</strong> Copy the file above
+    somewhere safe — see the README's one-command backup routine.</p>
+  {% endif %}
+</section>
+
+<p><a href="/">Back to dashboard</a></p>
+{% endblock %}

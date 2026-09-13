@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Advisor — step {{ step_number }} of {{ step_count }}{% endblock %}
+{% block content %}
+<p><strong>Learning:</strong> {{ topic }} &nbsp;·&nbsp; Step {{ step_number }} of {{ step_count }} ({{ step }})</p>
+<h1>{{ question | safe }}</h1>
+{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+<form method="post" action="/advisor/{{ interview_id }}">
+  <input type="hidden" name="step" value="{{ step }}">
+  <label for="answer">Your answer</label><br>
+  <textarea id="answer" name="answer" rows="5" cols="60" autofocus required>{{ saved_answer }}</textarea><br>
+  <button type="submit">Continue</button>
+</form>
+{% if prev_step %}<p><a href="/advisor/{{ interview_id }}/edit/{{ prev_step }}">← Back: change your {{ prev_step }} answer</a></p>{% endif %}
+{% endblock %}

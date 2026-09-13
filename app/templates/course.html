@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ course.title }}{% endblock %}
+{% block content %}
+<h1>{{ course.title }}</h1>
+<p>Status: {{ course.status }}</p>
+<form method="post" action="/courses/{{ course.id }}/status">
+  {% if course.status == "active" %}
+  <button type="submit" name="status" value="paused">Pause</button>
+  <button type="submit" name="status" value="archived">Archive</button>
+  {% elif course.status == "paused" %}
+  <button type="submit" name="status" value="active">Resume</button>
+  <button type="submit" name="status" value="archived">Archive</button>
+  {% elif course.status == "archived" %}
+  <button type="submit" name="status" value="active">Resume</button>
+  {% endif %}
+</form>
+{% if course.topics %}
+<ol>
+  {% for topic in course.topics %}
+  <li>
+    <a href="/topics/{{ topic.id }}">{{ topic.title }}</a> ({{ topic.status }})
+    {% if topic.time_box %} — <em>{{ topic.time_box }}</em>{% endif %}
+    <br>Milestone: {{ topic.milestone_description }}
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p>No topics yet.</p>
+{% endif %}
+<p><a href="/">Back to dashboard</a></p>
+{% endblock %}

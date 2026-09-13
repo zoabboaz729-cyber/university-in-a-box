@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Tutor session — {{ session.topic_title }}{% endblock %}
+{% block content %}
+<h1>Tutor: {{ session.topic_title }}</h1>
+<p>Course: {{ session.course_title }} — Milestone: {{ session.milestone_description }}</p>
+{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+{% for turn in session.turns %}
+  {% if pending and turn.id == pending.id %}
+  {% else %}
+  <p><strong>Q: {{ turn.question }}</strong></p>
+  {% if turn.user_answer %}<p>A: {{ turn.user_answer }}</p>{% endif %}
+  {% endif %}
+{% endfor %}
+{% if session.ended_at %}
+<p><strong>Session ended.</strong></p>
+{% if session.gap_note %}<p>Gap note: {{ session.gap_note }}</p>{% endif %}
+{% elif pending %}
+<h2>Current question</h2>
+<p><strong>{{ pending.question }}</strong></p>
+<form method="post" action="/tutor/{{ session.id }}/answer">
+  <input type="hidden" name="turn_id" value="{{ pending.id }}">
+  <label>Your answer<br><textarea name="answer" rows="4" cols="60" required></textarea></label><br>
+  <button type="submit">Answer</button>
+</form>
+<form method="post" action="/tutor/{{ session.id }}/end">
+  <button type="submit">End session</button>
+</form>
+{% else %}
+<p>Loading the next question… reload this page.</p>
+<form method="post" action="/tutor/{{ session.id }}/end">
+  <button type="submit">End session</button>
+</form>
+{% endif %}
+<p><a href="/topics/{{ session.topic_id }}">Back to topic</a></p>
+{% endblock %}

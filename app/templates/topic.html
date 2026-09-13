@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ topic.title }} — {{ topic.course_title }}{% endblock %}
+{% block content %}
+<h1>{{ topic.title }}</h1>
+<p>Course: <a href="/courses/{{ topic.course_id }}">{{ topic.course_title }}</a></p>
+<p>Status: {{ topic.status }}</p>
+{% if topic.time_box %}<p>Time box: <em>{{ topic.time_box }}</em></p>{% endif %}
+<p>Milestone: {{ topic.milestone_description }}</p>
+<form method="post" action="/topics/{{ topic.id }}/status">
+  {% if topic.status != "done" %}
+    {% if reviews is defined and reviews %}
+    <button type="submit" name="status" value="done">Mark done</button>
+    {% else %}
+    <button type="submit" name="status" value="done" disabled>Mark done</button>
+    <p><em>This topic needs at least one Editor review below before it can be marked done.</em></p>
+    {% endif %}
+  {% else %}
+  <button type="submit" name="status" value="in_progress">Reopen</button>
+  {% endif %}
+</form>
+<h2>{% if shelf_only %}Shelf (keep only){% else %}Sources{% endif %}</h2>
+{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+{% if not shelf_only %}
+<form method="post" action="/topics/{{ topic.id }}/sources">
+  <label>Label<br><input name="label" size="50" required></label><br>
+  <label>URL or reference<br><input name="reference" size="50"></label><br>
+  <button type="submit">Add source</button>
+</form>
+<p><a href="/topics/{{ topic.id }}/shelf">Shelf view (keep only)</a></p>
+{% else %}
+<p><a href="/topics/{{ topic.id }}">All sources view</a></p>
+{% endif %}
+{% if sources %}
+<ul>
+  {% for source in sources %}
+  <li{% if source.verdict == "skip" %} style="opacity: 0.55"{% endif %}>
+    <strong>{{ source.label }}</strong> — {{ source.verdict }}
+    <br>{{ source.reason }}
+    {% if source.url_or_reference %}<br>{{ source.url_or_reference }}{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No sources yet. Add the first one above — each gets a keep/skip/later verdict with a one-line reason.</p>
+{% endif %}
+<h2>Tutor sessions</h2>
+{% if open_session_id is defined and open_session_id %}
+<p><a href="/tutor/{{ open_session_id }}">Resume open session</a></p>
+{% else %}
+<form method="post" action="/topics/{{ topic.id }}/tutor/start">
+  <button type="submit">Start tutor session</button>
+</form>
+{% endif %}
+{% if sessions is defined and sessions %}
+<ul>
+  {% for s in sessions %}
+  <li>
+    <a href="/tutor/{{ s.id }}">Session {{ s.id }}</a>
+    — {{ s.turn_count }} turn(s)
+    {% if s.ended_at %}— ended{% else %}— open{% endif %}
+    {% if s.gap_note %}<br>Gap: {{ s.gap_note }}{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% elif open_session_id is not defined or not open_session_id %}
+<p>No tutor sessions yet. Start the first one above — one question at a time.</p>
+{% endif %}
+<h2>Editor reviews</h2>
+<form method="post" action="/topics/{{ topic.id }}/editor/submit">
+  <label>Submit your work for review (what you produced against this milestone)<br>
+  <textarea name="submission" rows="8" cols="60" required>{% if submission_draft is defined %}{{ submission_draft }}{% endif %}</textarea></label><br>
+  <button type="submit">Submit for review</button>
+</form>
+{% if reviews is defined and reviews %}
+<ul>
+  {% for r in reviews %}
+  <li>
+    <strong>Review {{ r.id }}</strong> — {{ r.created_at }}
+    {% if r.milestone_ref %}<br>Milestone: {{ r.milestone_ref }}{% endif %}
+    <br><strong>Strengths:</strong> {{ r.strengths }}
+    <br><strong>Biggest weakness:</strong> {{ r.biggest_weakness }}
+    <br><strong>Next edit:</strong> {{ r.next_edit }}
+    <details><summary>Your submission</summary><p>{{ r.submitted_text }}</p></details>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No reviews yet. Paste something you actually produced against the milestone above — the Editor returns strengths, one biggest weakness, and one concrete next edit.</p>
+{% endif %}
+<p><a href="/">Back to dashboard</a></p>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}University in a Box - Dashboard{% endblock %}
+
+{% block content %}
+<style>
+  .new-badge {
+    display: inline-block;
+    background: #fff7ed;
+    color: #b45309;
+    border: 1px solid #fed7aa;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+</style>
+
+<h1>University in a Box</h1>
+
+{% if latest_roommate_prompt %}
+<div class="row mb-4">
+  <div class="col">
+    <div class="card bg-light border-primary">
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center gap-2">
+          <span class="fw-bold text-primary">Fresh connection</span>
+          {% if new_since_visit %}
+          <span class="new-badge">New connection - refresh to see</span>
+          {% endif %}
+          <strong>ðŸ’¡ {{ latest_roommate_prompt.field }}</strong>
+          <span class="text-muted small">{{ latest_roommate_prompt.course_title }}</span>
+        </div>
+        <p class="mb-1 mt-1">{{ latest_roommate_prompt.prompt_text }}</p>
+        <a href="/roommate" class="btn btn-sm btn-outline-secondary mt-1">View the insights journal</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% elif courses %}
+<p class="text-muted fst-italic">No prompts yet - open the dashboard and the first one will appear when due.</p>
+{% endif %}
+
+<h2>Your courses</h2>
+
+<p><a href="/advisor/new" class="btn btn-primary">Start a new course</a>
+   <span class="text-muted small">— the Advisor will interview you and build the curriculum with you.</span></p>
+
+{% if courses %}
+<ul>
+  {% for course in courses %}
+  <li>
+    <a href="/courses/{{ course.id }}">{{ course.title }}</a>
+    - {{ course.status }} - created {{ course.created_at }}
+    - topics {{ course.done_topics }}/{{ course.total_topics }}
+    {% if course.current_topic %}
+    - next: <a href="/topics/{{ course.current_topic.id }}">{{ course.current_topic.title }}</a>
+    {% elif course.total_topics > 0 %}
+    - all topics done
+    {% else %}
+    - no topics yet
+    {% endif %}
+    {% if course.days_since_activity is not none %}
+    - active {{ course.days_since_activity }} day(s) ago
+    {% endif %}
+    {% if course.streak_days > 0 %}
+    - on a {{ course.streak_days }}-day streak
+    {% endif %}
+    {% if course.last_gap_note %}
+    - last gap: {{ course.last_gap_note }}
+    {% endif %}
+    {% if course.last_review_note %}
+    - last review: {{ course.last_review_note }}
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No courses yet. Use the <strong>Start a new course</strong> button above —
+   the Advisor will interview you and build your curriculum.</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Review your curriculum — {{ topic }}{% endblock %}
+{% block content %}
+<h1>Review your curriculum</h1>
+<p>Topic: {{ topic }}. Edit anything below, then start the course.</p>
+{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+<form method="post" action="/advisor/{{ interview_id }}/regenerate">
+  <button type="submit">Regenerate draft from my answers</button>
+</form>
+<hr>
+<form method="post" action="/advisor/{{ interview_id }}/confirm">
+  <label>Course title<br>
+    <input name="course_title" value="{{ draft.course_title }}" size="60"></label>
+  <hr>
+  {% for t in draft.topics %}
+  <h2>Topic {{ loop.index }}</h2>
+  <label>Title<br><input name="title-{{ loop.index0 }}" value="{{ t.title }}" size="60"></label><br>
+  <label>Milestone<br><textarea name="milestone-{{ loop.index0 }}" rows="2" cols="60">{{ t.milestone_description }}</textarea></label><br>
+  <label>Time box<br><input name="timebox-{{ loop.index0 }}" value="{{ t.time_box }}" size="20"></label>
+  <hr>
+  {% endfor %}
+  <button type="submit">Start this course</button>
+</form>
+{% endblock %}

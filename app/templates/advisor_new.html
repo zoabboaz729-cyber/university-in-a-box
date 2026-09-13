@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}New interview — University in a Box{% endblock %}
+{% block content %}
+<h1>What do you want to learn?</h1>
+<p>One topic. The Advisor will interview you in five steps, one question at a time.</p>
+<form method="post" action="/advisor/new">
+  <label for="topic">Topic</label><br>
+  <input id="topic" name="topic" type="text" size="50" autofocus required>
+  <button type="submit">Start interview</button>
+</form>
+<p><a href="/">Back to dashboard</a></p>
+{% endblock %}

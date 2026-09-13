@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Insights — University in a Box{% endblock %}
+{% block content %}
+<h1>Insights journal</h1>
+<p>Cross-domain connections the Roommate surfaced, newest first.
+   Reading one takes seconds — engaging is always optional.</p>
+{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
+{% if prompts %}
+<ul>
+  {% for prompt in prompts %}
+  <li>
+    <strong>{{ prompt.field }}</strong> — {{ prompt.created_at }}
+    <br>Course: {{ prompt.course_title }}
+    <br>{{ prompt.prompt_text }}
+    {% if prompt.user_reaction %}
+    <br>You: <em>{{ prompt.user_reaction }}</em>
+    {% endif %}
+    <form method="post" action="/roommate/prompts/{{ prompt.id }}/reaction">
+      <label>Reaction (optional — replace it any time)<br>
+      <textarea name="reaction" rows="2" cols="60">{% if prompt.user_reaction %}{{ prompt.user_reaction }}{% endif %}</textarea></label><br>
+      <button type="submit">Save reaction</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No prompts yet. Open the dashboard and the first one will appear here when due.</p>
+{% endif %}
+<p><a href="/">Back to dashboard</a></p>
+{% endblock %}
