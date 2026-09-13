@@ -29,6 +29,7 @@ right about current status; fix the disagreement the same session you notice it.
 | | | pins ROOMMATE_CADENCE_DAYS + pause-default), `sqlite3.Row` reads. Streak/activity indicator, |
 | | | README backup commands, template empty states as before. |
 | 8 — Verification & docs finalization | Done | 2026-09-12: owner-verified frontend walkthrough recorded in progress.md; regression loop automated (`tests/test_regression_loop.py`); final pre-commit suite **133 passed** (2 warnings, 15.18s); git init + initial commit **"v0.5: The initial application"** (99 files; clean status; no `.env`/`*.db`/`.venv/` tracked), pushed to the private GitHub remote. |
+| 9 — Frontend Redesign ("The Reading Room") | Done | 2026-09-13: Implemented full design system (Direction A — The Reading Room): hand-crafted CSS token stylesheet (`app/static/style.css`), self-hosted Google Fonts (`Source Serif 4` + `Inter` woff2 in `app/static/fonts/`), self-hosted `htmx.min.js` (2.0.4), persistent sidebar with live courses list on all pages, animated loading/thinking indicators for LLM calls, dead Bootstrap classes removed, mojibake lightbulb fixed, and Tutor dead-end bug resolved with `POST /tutor/{id}/retry`. Full suite: **134 passed** (100%). |
 
 Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
 
@@ -52,10 +53,7 @@ Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
   one-line reason persisted to sources; full list keeps skip rows dimmed,
   Shelf view filters keep-only; provider/parse errors render inline with
   nothing half-written; each add logs to activity_log; restart-safe.
-- Tests: `python -m pytest -q` → 133 tests as of 2026-09-13 (130 from the
-  Phase 7 completion pass + D-019/D-020 additions; one known load-flake
-  `test_roommate_routes.py::test_dashboard_does_not_block_on_generation`
-  can fail under full-suite load and passes solo).
+- Tests: `python -m pytest -q` → 134 tests as of 2026-09-13 (133 from Phase 8 + 1 new test for Tutor retry `POST /tutor/{id}/retry`; 100% pass rate).
 - Phase 7 completion items:masked API key reads `AI_API_KEY` via
   `load_config()` (regression: it once read a bogus `OPENROUTER_API_KEY` and
   always showed "(not set)"); cadence (validated ≥ 1 day) + per-course pause

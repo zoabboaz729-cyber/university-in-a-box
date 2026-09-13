@@ -1,31 +1,58 @@
 {% extends "base.html" %}
-{% block title %}{{ course.title }}{% endblock %}
+{% block title %}{{ course.title }} — University in a Box{% endblock %}
+
 {% block content %}
-<h1>{{ course.title }}</h1>
-<p>Status: {{ course.status }}</p>
+<a class="back-link" href="/">Dashboard</a>
+
+<div class="page-head">
+  <h1>{{ course.title }}</h1>
+  <p class="subtitle">
+    <span class="pill {{ course.status }}">{{ course.status | replace("_", " ") | title }}</span>
+  </p>
+</div>
+
 <form method="post" action="/courses/{{ course.id }}/status">
-  {% if course.status == "active" %}
-  <button type="submit" name="status" value="paused">Pause</button>
-  <button type="submit" name="status" value="archived">Archive</button>
-  {% elif course.status == "paused" %}
-  <button type="submit" name="status" value="active">Resume</button>
-  <button type="submit" name="status" value="archived">Archive</button>
-  {% elif course.status == "archived" %}
-  <button type="submit" name="status" value="active">Resume</button>
-  {% endif %}
+  <div class="course-actions">
+    {% if course.status == "active" %}
+    <button class="btn btn-secondary" type="submit" name="status" value="paused"
+            hx-include="this" hx-indicator="this">Pause</button>
+    <button class="btn btn-secondary" type="submit" name="status" value="archived"
+            hx-include="this" hx-indicator="this">Archive</button>
+    {% elif course.status == "paused" %}
+    <button class="btn btn-primary" type="submit" name="status" value="active"
+            hx-include="this" hx-indicator="this">Resume</button>
+    <button class="btn btn-secondary" type="submit" name="status" value="archived"
+            hx-include="this" hx-indicator="this">Archive</button>
+    {% elif course.status == "archived" %}
+    <button class="btn btn-primary" type="submit" name="status" value="active"
+            hx-include="this" hx-indicator="this">Resume</button>
+    {% elif course.status == "done" %}
+    <button class="btn btn-secondary" type="submit" name="status" value="active"
+            hx-include="this" hx-indicator="this">Reopen</button>
+    {% endif %}
+  </div>
 </form>
+
 {% if course.topics %}
-<ol>
+<h2>Topics</h2>
+<div>
   {% for topic in course.topics %}
-  <li>
-    <a href="/topics/{{ topic.id }}">{{ topic.title }}</a> ({{ topic.status }})
-    {% if topic.time_box %} — <em>{{ topic.time_box }}</em>{% endif %}
-    <br>Milestone: {{ topic.milestone_description }}
-  </li>
+  <div class="topic-list-item">
+    <div class="topic-index">{{ "%02d" | format(loop.index) }}</div>
+    <div>
+      <p class="topic-title">
+        <a href="/topics/{{ topic.id }}">{{ topic.title }}</a>
+      </p>
+      <p class="topic-milestone">{{ topic.milestone_description }}</p>
+      {% if topic.time_box %}
+      <p class="topic-timebox">⏱ {{ topic.time_box }}</p>
+      {% endif %}
+    </div>
+    <span class="pill {{ topic.status }}">{{ topic.status | replace("_", " ") | title }}</span>
+  </div>
   {% endfor %}
-</ol>
+</div>
 {% else %}
-<p>No topics yet.</p>
+<div class="callout callout-info">No topics yet.</div>
 {% endif %}
-<p><a href="/">Back to dashboard</a></p>
 {% endblock %}

@@ -4,14 +4,53 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}University in a Box{% endblock %}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; }
-    nav { margin-bottom: 1.5rem; }
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
-  <nav><a href="/">Dashboard</a> · <a href="/advisor/new">New course</a> · <a href="/roommate">Insights</a> · <a href="/settings">Settings</a></nav>
-  {% block content %}{% endblock %}
+<div class="shell">
+  <aside class="sidebar">
+    <a class="wordmark" href="/">University in a Box<span class="wordmark-sub">your reading room</span></a>
+
+    <nav class="nav-group">
+      <a class="nav-item{% if request.url.path == '/' %} active{% endif %}" href="/">
+        <span class="nav-dot"></span>Dashboard
+      </a>
+      <a class="nav-item{% if request.url.path.startswith('/roommate') %} active{% endif %}" href="/roommate">
+        <span class="nav-dot"></span>Insights
+      </a>
+      <a class="nav-item{% if request.url.path.startswith('/settings') %} active{% endif %}" href="/settings">
+        <span class="nav-dot"></span>Settings
+      </a>
+    </nav>
+
+    <div>
+      <div class="nav-label-row">
+        <p class="nav-label">Your courses</p>
+        <a class="nav-new-link" href="/advisor/new">+ New</a>
+      </div>
+      <div class="sidebar-courses">
+        {% set courses_sb = sidebar_courses() %}
+        {% for c in courses_sb %}
+        <a class="sidebar-course" href="/courses/{{ c.id }}">
+          <span class="sidebar-course-title">{{ c.title }}</span>
+          <span class="sidebar-course-meta">
+            <span class="status-dot {{ c.status }}"></span>
+            {{ c.done_topics }} / {{ c.total_topics }} topics
+          </span>
+        </a>
+        {% else %}
+        <p style="font-size:.78rem;color:var(--ink-faint);padding:.3rem .6rem;margin:0;">No courses yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% block sidebar_extra %}{% endblock %}
+  </aside>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</div>
 </body>
 </html>
-

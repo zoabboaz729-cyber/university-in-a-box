@@ -1,7 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Something went wrong{% endblock %}
+{% block title %}Something went wrong — University in a Box{% endblock %}
+
 {% block content %}
-<h1>Something went wrong</h1>
-<p>{{ message }}</p>
-<p><a href="/">Back to dashboard</a></p>
+<a class="back-link" href="/">Back to dashboard</a>
+
+<div class="error-wrap">
+  <h1>Something went wrong</h1>
+  <div class="callout callout-error">
+    {{ message }}
+  </div>
+  <p style="color:var(--ink-soft);font-size:0.88rem">
+    If you were expecting to see something here, it may have been moved, deleted, or entered in an incomplete state.
+  </p>
+  <div>
+    <a class="btn btn-secondary btn-sm" href="/">Return to dashboard</a>
+  </div>
+</div>
 {% endblock %}

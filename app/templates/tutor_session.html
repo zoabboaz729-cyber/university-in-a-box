@@ -1,35 +1,114 @@
 {% extends "base.html" %}
-{% block title %}Tutor session — {{ session.topic_title }}{% endblock %}
+{% block title %}Tutor — {{ session.topic_title }}{% endblock %}
+
 {% block content %}
-<h1>Tutor: {{ session.topic_title }}</h1>
-<p>Course: {{ session.course_title }} — Milestone: {{ session.milestone_description }}</p>
-{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
-{% for turn in session.turns %}
-  {% if pending and turn.id == pending.id %}
-  {% else %}
-  <p><strong>Q: {{ turn.question }}</strong></p>
-  {% if turn.user_answer %}<p>A: {{ turn.user_answer }}</p>{% endif %}
-  {% endif %}
-{% endfor %}
-{% if session.ended_at %}
-<p><strong>Session ended.</strong></p>
-{% if session.gap_note %}<p>Gap note: {{ session.gap_note }}</p>{% endif %}
-{% elif pending %}
-<h2>Current question</h2>
-<p><strong>{{ pending.question }}</strong></p>
-<form method="post" action="/tutor/{{ session.id }}/answer">
-  <input type="hidden" name="turn_id" value="{{ pending.id }}">
-  <label>Your answer<br><textarea name="answer" rows="4" cols="60" required></textarea></label><br>
-  <button type="submit">Answer</button>
-</form>
-<form method="post" action="/tutor/{{ session.id }}/end">
-  <button type="submit">End session</button>
-</form>
-{% else %}
-<p>Loading the next question… reload this page.</p>
-<form method="post" action="/tutor/{{ session.id }}/end">
-  <button type="submit">End session</button>
-</form>
+<a class="back-link" href="/topics/{{ session.topic_id }}">{{ session.topic_title }}</a>
+
+<div class="page-head">
+  <h1>Tutor session</h1>
+  <p class="subtitle">{{ session.course_title }} &middot; {{ session.topic_title }}</p>
+</div>
+
+{% if error %}
+<div class="callout callout-error">{{ error }}</div>
 {% endif %}
-<p><a href="/topics/{{ session.topic_id }}">Back to topic</a></p>
+
+<div class="card" style="margin-bottom:.5rem;font-size:.82rem;color:var(--ink-faint)">
+  Milestone: {{ session.milestone_description }}
+</div>
+
+<div class="workbench">
+  <div class="workbench-head">
+    <h3>{% if session.ended_at %}Session ended{% else %}Session in progress{% endif %}</h3>
+    {% set turn_count = session.turns | length %}
+    <span class="card-meta">Turn {{ turn_count }}</span>
+  </div>
+
+  <!-- transcript of answered turns -->
+  {% set answered_turns = [] %}
+  {% for turn in session.turns %}
+    {% if pending and turn.id == pending.id %}
+      {# skip the pending turn — rendered separately below #}
+    {% elif turn.user_answer %}
+      {% set _ = answered_turns.append(turn) %}
+    {% endif %}
+  {% endfor %}
+
+  {% if answered_turns %}
+  <div class="transcript">
+    {% for turn in answered_turns %}
+    <div class="turn-block">
+      <p class="turn-q">{{ turn.question }}</p>
+      <p class="turn-a">{{ turn.user_answer }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Current state -->
+  {% if session.ended_at %}
+    {% if session.gap_note %}
+    <div class="callout callout-info">
+      <strong>Gap identified:</strong> {{ session.gap_note }}
+    </div>
+    {% else %}
+    <div class="callout callout-info">Session complete.</div>
+    {% endif %}
+
+  {% elif pending %}
+  <!-- Pending question + answer form -->
+  <div style="border-top:1px solid var(--hairline);padding-top:1rem;margin-top:{% if answered_turns %}1rem{% else %}0{% endif %}">
+    <p class="turn-q" style="font-size:.95rem;margin-bottom:.8rem">{{ pending.question }}</p>
+    <form method="post" action="/tutor/{{ session.id }}/answer"
+          hx-on::before-request="this.querySelector('button[type=submit]').classList.add('htmx-request')"
+          hx-on::after-request="this.querySelector('button[type=submit]').classList.remove('htmx-request')">
+      <input type="hidden" name="turn_id" value="{{ pending.id }}">
+      <div class="form-group">
+        <label for="answer-field">Your answer</label>
+        <textarea id="answer-field" name="answer" rows="5" required autofocus></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" id="answer-btn">Answer</button>
+        <span id="thinking-hint" class="thinking" style="display:none">
+          <span class="dots"><i></i><i></i><i></i></span>
+          Tutor is reading your answer and preparing the next question
+        </span>
+      </div>
+    </form>
+    <script>
+      (function(){
+        var form = document.querySelector('form[action*="/answer"]');
+        var hint = document.getElementById('thinking-hint');
+        var btn  = document.getElementById('answer-btn');
+        if(form && hint && btn){
+          form.addEventListener('submit', function(){
+            btn.disabled = true;
+            btn.textContent = 'Submitting…';
+            hint.style.display = 'flex';
+          });
+        }
+      })();
+    </script>
+  </div>
+  <div style="margin-top:1rem">
+    <form method="post" action="/tutor/{{ session.id }}/end">
+      <button class="btn btn-ghost btn-sm" type="submit">End session &amp; get gap note</button>
+    </form>
+  </div>
+
+  {% else %}
+  <!-- Dead-end state: no pending turn, session not ended -->
+  <div class="callout callout-warning" style="margin-bottom:1rem">
+    The next question didn't generate — your last answer is saved. Try generating it again below.
+  </div>
+  <div class="form-actions">
+    <form method="post" action="/tutor/{{ session.id }}/retry">
+      <button class="btn btn-primary btn-sm" type="submit">Try again</button>
+    </form>
+    <form method="post" action="/tutor/{{ session.id }}/end">
+      <button class="btn btn-ghost btn-sm" type="submit">End session instead</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

@@ -6,7 +6,7 @@
 |---|---|---|
 | Backend | Python + FastAPI | Small, explicit, huge amount of training data for the coding agent to draw on, easy to test with plain HTTP calls, no build step. |
 | Database | SQLite, single file (`data/university.db`) | Zero setup, trivially backed up (copy one file), plenty for one user's data over years. |
-| Frontend | Server-rendered HTML + HTMX + minimal CSS (no build pipeline) | A small model reliably produces correct server-rendered templates; a full SPA (React/Vue state management, bundlers) is a much easier place for a weak model to introduce subtle, hard-to-diagnose bugs. Add a proper frontend framework later only if this genuinely becomes limiting — see `docs/04-CONSTRAINTS.md` on scope discipline. |
+| Frontend | Server-rendered HTML + self-hosted htmx + hand-crafted CSS design tokens (Direction A — The Reading Room: warm paper palette, self-hosted Source Serif 4 and Inter fonts, persistent sidebar, animated loading indicators, no build pipeline). | A small model reliably produces correct server-rendered templates; avoids heavy frontend bundlers while delivering an original, legible reading-room atmosphere with visual lag feedback. |
 | AI provider | Pluggable adapter behind one interface (`app/ai/provider.py`), configured via `.env` | Keeps the five ALTER modules decoupled from *which* LLM API answers them. The coding-agent's own models (GLM-Flash-5.3 / DeepSeek V4) are a *development-time* tool inside Cline — the running app needs its own configured API key for whichever OpenAI-compatible endpoint the user points it at. Do not assume these are the same thing. |
 | Scheduling (Roommate cadence, reminders) | A simple in-process scheduler checked on app load / a `/tasks/due` endpoint hit by a cron-like mechanism | Avoids pulling in a heavy job-queue system for a single-user local app. |
 
@@ -89,7 +89,8 @@ university-in-a-box/
 │   │   ├── advisor.py / librarian.py / tutor.py / editor.py / roommate.py
 │   │   └── prompts/             # one .txt or .md per role
 │   ├── routes/                  # one file per module (dashboard, courses, tutor, ...)
-│   └── templates/               # HTMX-driven server-rendered HTML
+│   ├── static/                  # self-hosted CSS, htmx, and woff2 font files
+│   └── templates/               # server-rendered HTML templates
 ├── data/                        # SQLite file + backups live here (gitignored)
 ├── tests/                        # mirrors app/ structure
 ├── docs/                          # this folder

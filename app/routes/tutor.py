@@ -184,3 +184,43 @@ def tutor_end(request: Request, session_id: int):
     end_session(session_id, gap.text)
     return RedirectResponse(f"/topics/{session['topic_id']}", status_code=303)
 
+
+@router.post("/tutor/{session_id}/retry")
+def tutor_retry(request: Request, session_id: int):
+    """Re-attempts next question generation if an earlier attempt failed and left pending=None."""
+    session = get_session(session_id)
+    if session is None:
+        return templates.TemplateResponse(
+            request, "error.html",
+            {"message": "Tutor session not found."}, status_code=404,
+        )
+    if session["ended_at"] is not None:
+        return RedirectResponse(f"/tutor/{session_id}", status_code=303)
+    # If there is already an unanswered pending question, just redirect.
+    turns = session["turns"]
+    for turn in reversed(turns):
+        if not turn["user_answer"]:
+            return RedirectResponse(f"/tutor/{session_id}", status_code=303)
+
+    topic = get_topic(session["topic_id"])
+    try:
+        nxt = tutor.next_question(
+            topic["title"], topic["milestone_description"] or "",
+            _shelf_lines(session["topic_id"]),
+            session["turns"], get_provider(),
+        )
+    except ProviderError as exc:
+        return _render_session(
+            request, session,
+            error="Could not ask the next question: "
+                  + str(exc) + " — try again.",
+        )
+    except Exception as exc:
+        return _render_session(
+            request, session,
+            error="The next question came back in a "
+                  "bad shape (" + str(exc) + ") — try again.",
+        )
+    add_turn(session_id, nxt.question)
+    return RedirectResponse(f"/tutor/{session_id}", status_code=303)
+

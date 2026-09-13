@@ -5,7 +5,17 @@ any coding-agent session should read — it should be enough, on its own, to kno
 where the project stands and what to do next.**
 
 ## Current state
-Phase 8 is **DONE (2026-09-12, this session)**. Final steps, in order:
+**2026-09-13 (Phase 9 Frontend Redesign session): FULL REDESIGN COMPLETED & VERIFIED.**
+All requirements approved in the implementation plan have been executed:
+1. **Design System**: Hand-crafted CSS design tokens (`app/static/style.css`) implementing **Direction A — The Reading Room** (warm paper tones, responsive grid, card and pill components, progress bars).
+2. **Offline Local-First Fonts**: Self-hosted Google Fonts (`Source Serif 4` and `Inter` woff2 files in `app/static/fonts/`).
+3. **HTMX & Loading States**: Self-hosted `htmx.min.js` (2.0.4) in `app/static/`. Buttons disable immediately on submit, preventing duplicate submissions, and display animated pulsing "thinking" indicators (`.dots i`) during LLM calls.
+4. **Tutor Dead-End Bug Fixed**: Resolved with new endpoint `POST /tutor/{session_id}/retry` in `app/routes/tutor.py` and a "Try again" action button on `tutor_session.html`.
+5. **Persistent Navigation**: Sidebar shell in `base.html` permanently displays all user courses and real-time progress on every page via a clean Jinja2 global helper `sidebar_courses`.
+6. **All 11 Templates Modernized**: Dead Bootstrap classes stripped, layout modernized, and the mojibake `ðŸ’¡` byte sequence fixed to valid UTF-8 `💡`.
+7. **Test Suite**: **134 passed, 2 warnings in 15.90s** (100% pass rate). Fully backward-compatible with all existing contracts.
+
+Phase 8 is **DONE (2026-09-12, prior session)**. Final steps, in order:
 1. The owner manually walked the entire frontend and confirmed every workflow
    matches progress.md — recorded in progress.md's "Full-loop walkthrough result".
 2. Final pre-commit full-suite run: **133 passed, 2 warnings in 15.18s**

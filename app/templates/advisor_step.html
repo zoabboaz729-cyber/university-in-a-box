@@ -1,14 +1,59 @@
 {% extends "base.html" %}
 {% block title %}Advisor — step {{ step_number }} of {{ step_count }}{% endblock %}
+
 {% block content %}
-<p><strong>Learning:</strong> {{ topic }} &nbsp;·&nbsp; Step {{ step_number }} of {{ step_count }} ({{ step }})</p>
-<h1>{{ question | safe }}</h1>
-{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
-<form method="post" action="/advisor/{{ interview_id }}">
-  <input type="hidden" name="step" value="{{ step }}">
-  <label for="answer">Your answer</label><br>
-  <textarea id="answer" name="answer" rows="5" cols="60" autofocus required>{{ saved_answer }}</textarea><br>
-  <button type="submit">Continue</button>
-</form>
-{% if prev_step %}<p><a href="/advisor/{{ interview_id }}/edit/{{ prev_step }}">← Back: change your {{ prev_step }} answer</a></p>{% endif %}
+{% if prev_step %}
+<a class="back-link" href="/advisor/{{ interview_id }}/edit/{{ prev_step }}">← Back: change your {{ prev_step }} answer</a>
+{% else %}
+<a class="back-link" href="/">Dashboard</a>
+{% endif %}
+
+<div class="page-head">
+  <div class="step-progress">
+    {% for i in range(1, step_count + 1) %}
+    <span class="step-pip{% if i < step_number %} done{% elif i == step_number %} current{% endif %}"></span>
+    {% endfor %}
+  </div>
+  <p class="subtitle">
+    <strong>Learning:</strong> {{ topic }} &middot; Step {{ step_number }} of {{ step_count }} ({{ step }})
+  </p>
+  <h1 style="font-size:1.45rem;margin-top:0.6rem;line-height:1.35">{{ question | safe }}</h1>
+</div>
+
+{% if error %}
+<div class="callout callout-error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/advisor/{{ interview_id }}" id="step-form">
+    <input type="hidden" name="step" value="{{ step }}">
+    <div class="form-group">
+      <label for="answer">Your answer</label>
+      <textarea id="answer" name="answer" rows="6" autofocus required
+                placeholder="Write freely — your answers will shape the sequence and milestones.">{{ saved_answer }}</textarea>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit" id="step-btn">Continue →</button>
+      <span id="step-hint" class="thinking" style="display:none">
+        <span class="dots"><i></i><i></i><i></i></span>
+        Saving your answer…
+      </span>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function(){
+    var form = document.getElementById('step-form');
+    var btn = document.getElementById('step-btn');
+    var hint = document.getElementById('step-hint');
+    if (form && btn && hint) {
+      form.addEventListener('submit', function() {
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        hint.style.display = 'flex';
+      });
+    }
+  })();
+</script>
 {% endblock %}

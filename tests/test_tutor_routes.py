@@ -139,3 +139,46 @@ def test_tutor_answer_refreshes_days_since_on_dashboard(tmp_path, monkeypatch):
                 follow_redirects=False)
     dash = client.get("/")
     assert "0 day(s) ago" in dash.text
+
+
+def test_tutor_retry_generates_when_no_pending(tmp_path, monkeypatch):
+    """The retry route re-attempts next question generation after a failure."""
+    client, provider = make_client(tmp_path, monkeypatch, [Q1, Q1])
+    topic_id = _topic()
+    url = client.post(f"/topics/{topic_id}/tutor/start",
+                      follow_redirects=False).headers["location"]
+    sid = int(url.rsplit("/", 1)[-1])
+
+    # 404 for nonexistent session
+    assert client.post("/tutor/99999/retry").status_code == 404
+
+    # With a pending question already present, retry just redirects without adding turns
+    resp = client.post(f"/tutor/{sid}/retry", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/tutor/{sid}"
+
+    # Now answer the turn
+    from app.roles.tutor_store import get_session
+    turn_id = get_session(sid)["turns"][0]["id"]
+    client.post(f"/tutor/{sid}/answer",
+                data={"turn_id": str(turn_id), "answer": "Answer 1"},
+                follow_redirects=False)
+
+    # Now we have 2 turns. Pretend turn 2 was deleted/not generated (simulate failure)
+    with sqlite3.connect(get_db_path()) as conn:
+        conn.execute("DELETE FROM tutor_turns WHERE session_id = ? AND user_answer IS NULL", (sid,))
+
+    # Session has no pending turn now
+    page = client.get(f"/tutor/{sid}").text
+    assert "Try again" in page
+
+    # Retry now calls the provider and creates the next turn
+    provider.replies.append(Q1)
+    retry_resp = client.post(f"/tutor/{sid}/retry", follow_redirects=False)
+    assert retry_resp.status_code == 303
+    assert retry_resp.headers["location"] == f"/tutor/{sid}"
+
+    # Verify new turn was created
+    session_after = get_session(sid)
+    assert len(session_after["turns"]) == 2
+    assert session_after["turns"][1]["question"] == "What is the core idea here?"

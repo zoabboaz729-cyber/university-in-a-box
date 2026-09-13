@@ -1,83 +1,90 @@
 {% extends "base.html" %}
-
-{% block title %}University in a Box - Dashboard{% endblock %}
+{% block title %}Dashboard — University in a Box{% endblock %}
 
 {% block content %}
-<style>
-  .new-badge {
-    display: inline-block;
-    background: #fff7ed;
-    color: #b45309;
-    border: 1px solid #fed7aa;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    font-weight: 600;
-  }
-</style>
-
-<h1>University in a Box</h1>
+<div class="page-head">
+  <h1>Welcome back</h1>
+  {% if courses %}
+    {% set active_count = courses | selectattr("status", "equalto", "active") | list | length %}
+    <p class="subtitle">
+      {% if active_count > 0 %}{{ active_count }} active course{{ "s" if active_count != 1 else "" }}{% else %}All courses paused{% endif %}
+      {% for course in courses %}{% if course.streak_days > 0 %} &middot; <span class="streak">on a {{ course.streak_days }}-day streak</span>{% endif %}{% endfor %}
+    </p>
+  {% else %}
+    <p class="subtitle">No courses yet — start one below.</p>
+  {% endif %}
+</div>
 
 {% if latest_roommate_prompt %}
-<div class="row mb-4">
-  <div class="col">
-    <div class="card bg-light border-primary">
-      <div class="card-body py-2">
-        <div class="d-flex align-items-center gap-2">
-          <span class="fw-bold text-primary">Fresh connection</span>
-          {% if new_since_visit %}
-          <span class="new-badge">New connection - refresh to see</span>
-          {% endif %}
-          <strong>ðŸ’¡ {{ latest_roommate_prompt.field }}</strong>
-          <span class="text-muted small">{{ latest_roommate_prompt.course_title }}</span>
-        </div>
-        <p class="mb-1 mt-1">{{ latest_roommate_prompt.prompt_text }}</p>
-        <a href="/roommate" class="btn btn-sm btn-outline-secondary mt-1">View the insights journal</a>
+<div class="insight-card">
+  <div class="tag">
+    💡 Fresh connection
+    {% if new_since_visit %}<span class="new-badge">New connection - refresh to see</span>{% endif %}
+  </div>
+  <p class="body">{{ latest_roommate_prompt.prompt_text }}</p>
+  <p class="from">
+    <strong>{{ latest_roommate_prompt.field }}</strong> &middot;
+    {{ latest_roommate_prompt.course_title }}
+  </p>
+  <a class="insight-link" href="/roommate">View the insights journal →</a>
+</div>
+{% elif courses %}
+<div class="insight-card">
+  <div class="tag">Roommate</div>
+  <p class="body" style="color:var(--ink-soft)">No cross-domain connections yet — open the dashboard again after your next session and the first one will appear here.</p>
+</div>
+{% endif %}
+
+<div class="section-head">
+  <h2>Your courses</h2>
+  <a class="btn btn-primary btn-sm" href="/advisor/new">Start a new course</a>
+</div>
+
+{% if courses %}
+<div class="courses-list">
+  {% for course in courses %}
+  <div class="course-row">
+    <div class="course-num">{{ "%02d" | format(loop.index) }}</div>
+    <div>
+      <p class="course-title"><a href="/courses/{{ course.id }}">{{ course.title }}</a></p>
+      {% if course.current_topic %}
+      <p class="course-sub">next: <a href="/topics/{{ course.current_topic.id }}">{{ course.current_topic.title }}</a></p>
+      {% elif course.total_topics > 0 %}
+      <p class="course-sub">all topics done</p>
+      {% else %}
+      <p class="course-sub">no topics yet</p>
+      {% endif %}
+      <div class="course-progress">
+        <div class="prog-bar"><span style="width:{{ ((course.done_topics / course.total_topics * 100) | int) if course.total_topics > 0 else 0 }}%"></span></div>
+        topics {{ course.done_topics }}/{{ course.total_topics }}
+      </div>
+      {% if course.last_gap_note or course.last_review_note %}
+      <div class="course-notes">
+        {% if course.last_gap_note %}
+        <div class="course-note"><b>last gap:</b> {{ course.last_gap_note }}</div>
+        {% endif %}
+        {% if course.last_review_note %}
+        <div class="course-note"><b>last review:</b> {{ course.last_review_note }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="course-side">
+      {% if course.days_since_activity is not none %}
+      <span>active {{ course.days_since_activity }} day(s) ago</span>
+      {% endif %}
+      <div>
+        <span class="pill {{ course.status }}">{{ course.status }}</span>
+        <span style="font-size:0.72rem;color:var(--ink-faint);display:block;margin-top:0.2rem">created {{ course.created_at }}</span>
       </div>
     </div>
   </div>
-</div>
-{% elif courses %}
-<p class="text-muted fst-italic">No prompts yet - open the dashboard and the first one will appear when due.</p>
-{% endif %}
-
-<h2>Your courses</h2>
-
-<p><a href="/advisor/new" class="btn btn-primary">Start a new course</a>
-   <span class="text-muted small">— the Advisor will interview you and build the curriculum with you.</span></p>
-
-{% if courses %}
-<ul>
-  {% for course in courses %}
-  <li>
-    <a href="/courses/{{ course.id }}">{{ course.title }}</a>
-    - {{ course.status }} - created {{ course.created_at }}
-    - topics {{ course.done_topics }}/{{ course.total_topics }}
-    {% if course.current_topic %}
-    - next: <a href="/topics/{{ course.current_topic.id }}">{{ course.current_topic.title }}</a>
-    {% elif course.total_topics > 0 %}
-    - all topics done
-    {% else %}
-    - no topics yet
-    {% endif %}
-    {% if course.days_since_activity is not none %}
-    - active {{ course.days_since_activity }} day(s) ago
-    {% endif %}
-    {% if course.streak_days > 0 %}
-    - on a {{ course.streak_days }}-day streak
-    {% endif %}
-    {% if course.last_gap_note %}
-    - last gap: {{ course.last_gap_note }}
-    {% endif %}
-    {% if course.last_review_note %}
-    - last review: {{ course.last_review_note }}
-    {% endif %}
-  </li>
   {% endfor %}
-</ul>
+</div>
 {% else %}
-<p>No courses yet. Use the <strong>Start a new course</strong> button above —
-   the Advisor will interview you and build your curriculum.</p>
+<div class="callout callout-info">
+  No courses yet. Use <strong>Start a new course</strong> above —
+  the Advisor will interview you and build your curriculum.
+</div>
 {% endif %}
-
 {% endblock %}

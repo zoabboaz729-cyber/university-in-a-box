@@ -5,7 +5,7 @@
 ## Technologies (default — see docs/02-ARCHITECTURE.md for rationale)
 - Python + FastAPI (backend/routing)
 - SQLite (single-file database, `data/university.db`)
-- HTMX + server-rendered HTML templates (frontend, no build step)
+- Server-rendered HTML + self-hosted htmx 2.0.4 + hand-crafted CSS design tokens (`app/static/style.css`, Direction A — The Reading Room: warm paper palette, self-hosted Source Serif 4 and Inter woff2 fonts, persistent course sidebar, animated loading indicators, no build pipeline). Static assets mounted at `/static`.
 - An OpenAI-compatible LLM API for the app's runtime AI features, configured via `.env`
   (provider/model/key — owner decision 2026-09-09, see D-006: default = OpenRouter
   with a `:free` model; any OpenAI-compatible endpoint works by changing the same

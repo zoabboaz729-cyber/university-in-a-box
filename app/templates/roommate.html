@@ -1,30 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Insights — University in a Box{% endblock %}
+
 {% block content %}
-<h1>Insights journal</h1>
-<p>Cross-domain connections the Roommate surfaced, newest first.
-   Reading one takes seconds — engaging is always optional.</p>
-{% if error %}<p><strong>{{ error }}</strong></p>{% endif %}
-{% if prompts %}
-<ul>
-  {% for prompt in prompts %}
-  <li>
-    <strong>{{ prompt.field }}</strong> — {{ prompt.created_at }}
-    <br>Course: {{ prompt.course_title }}
-    <br>{{ prompt.prompt_text }}
-    {% if prompt.user_reaction %}
-    <br>You: <em>{{ prompt.user_reaction }}</em>
-    {% endif %}
-    <form method="post" action="/roommate/prompts/{{ prompt.id }}/reaction">
-      <label>Reaction (optional — replace it any time)<br>
-      <textarea name="reaction" rows="2" cols="60">{% if prompt.user_reaction %}{{ prompt.user_reaction }}{% endif %}</textarea></label><br>
-      <button type="submit">Save reaction</button>
-    </form>
-  </li>
-  {% endfor %}
-</ul>
-{% else %}
-<p>No prompts yet. Open the dashboard and the first one will appear here when due.</p>
+<a class="back-link" href="/">Dashboard</a>
+
+<div class="page-head">
+  <h1>Insights journal</h1>
+  <p class="subtitle">Cross-domain connections the Roommate surfaced, newest first. Reading one takes seconds — engaging is always optional.</p>
+</div>
+
+{% if error %}
+<div class="callout callout-error">{{ error }}</div>
 {% endif %}
-<p><a href="/">Back to dashboard</a></p>
+
+{% if prompts %}
+<div style="display:flex;flex-direction:column;gap:1.25rem">
+  {% for prompt in prompts %}
+  <div class="prompt-card">
+    <div class="prompt-meta">
+      <span class="prompt-field">💡 {{ prompt.field }}</span>
+      <span class="prompt-course">Course: {{ prompt.course_title }}</span>
+      <span class="prompt-date">{{ prompt.created_at }}</span>
+    </div>
+    <p class="prompt-text">{{ prompt.prompt_text }}</p>
+    {% if prompt.user_reaction %}
+    <div class="prompt-reaction">
+      <strong>Your reaction:</strong> {{ prompt.user_reaction }}
+    </div>
+    {% endif %}
+    <form method="post" action="/roommate/prompts/{{ prompt.id }}/reaction" style="margin-top:0.75rem">
+      <div class="form-group" style="margin-bottom:0.5rem">
+        <label for="reaction-{{ prompt.id }}" style="font-size:0.76rem">Reaction (optional — replace it any time)</label>
+        <textarea id="reaction-{{ prompt.id }}" name="reaction" rows="2" placeholder="Note down a reaction or leave empty">{% if prompt.user_reaction %}{{ prompt.user_reaction }}{% endif %}</textarea>
+      </div>
+      <button class="btn btn-secondary btn-sm" type="submit">Save reaction</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="callout callout-info">
+  No prompts yet. Open the dashboard and the first one will appear here when due.
+</div>
+{% endif %}
 {% endblock %}
