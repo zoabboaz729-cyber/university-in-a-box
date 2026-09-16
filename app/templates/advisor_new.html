@@ -7,6 +7,11 @@
 <div class="page-head">
   <h1>What do you want to learn?</h1>
   <p class="subtitle">The Advisor will interview you in five steps, then build a curriculum with you.</p>
+  <p class="subtitle" style="font-size:.85rem;color:var(--ink-soft)">
+    Heads up: the time budget you state in the <strong>sequencing</strong> step
+    (how many hours per week, for how many weeks) is what decides how many
+    topics your course gets — and each topic carries its own time estimate.
+  </p>
 </div>
 
 <div class="card" style="max-width:600px">
@@ -16,6 +21,20 @@
       <input id="topic" name="topic" type="text" autofocus required
              placeholder="e.g. Business finance fundamentals, Design theory, Applied statistics">
     </div>
+    {% set groups_for_new = all_groups() %}
+    {% if groups_for_new %}
+    <div class="form-group">
+      <label for="group">Create inside a group (optional)</label>
+      <select id="group" name="group_id">
+        <option value="">— No group (individual course) —</option>
+        {% for g in groups_for_new %}
+        <option value="{{ g.id }}">{{ g.name }}{% if g.timeframe_duration %} · {{ g.timeframe_duration }}{% endif %}</option>
+        {% endfor %}
+      </select>
+      <p class="form-hint">If the group declares a shared timeframe, it will
+      pre-fill the sequencing question — you can edit it before continuing.</p>
+    </div>
+    {% endif %}
     <button class="btn btn-primary" type="submit">Start interview →</button>
   </form>
 </div>

@@ -32,6 +32,7 @@ right about current status; fix the disagreement the same session you notice it.
 | 9 — Frontend Redesign ("The Reading Room") | Done | 2026-09-13: Implemented full design system (Direction A — The Reading Room): hand-crafted CSS token stylesheet (`app/static/style.css`), self-hosted Google Fonts (`Source Serif 4` + `Inter` woff2 in `app/static/fonts/`), self-hosted `htmx.min.js` (2.0.4), persistent sidebar with live courses list on all pages, animated loading/thinking indicators for LLM calls, dead Bootstrap classes removed, mojibake lightbulb fixed, and Tutor dead-end bug resolved with `POST /tutor/{id}/retry`. Full suite: **134 passed** (100%). |
 | 10 — Course Deletion & Context Menus | Done | 2026-09-13: Atomic cascading deletion across all 8 related tables (`delete_course` in `app/roles/course_manage.py`, route `POST /courses/{id}/delete`), universal 3-dots context menu on sidebar and dashboard course cards, consequence warning `<dialog>` modal in `base.html`, explicit Delete button on `/courses/{id}`, Roommate `latest_prompt` fallback, and full test suite: **139 passed** (100%). |
 | 11 — Course Groups / Semesters & Multi-Course Insights | Done | 2026-09-13: `course_groups` table + `group_id` on `courses` (idempotent `_migrate()` in `app/db.py`), `app/roles/group_store.py` (create/update/delete with D-022 Option B, assignment, `sidebar_groups()`), `app/routes/groups.py` (`GET /groups`, create/update/delete, `POST /courses/{id}/group` for the 3-dots menu), `templates/groups.html` management page, collapsible group folders in the sidebar + dashboard filters, intra-group Roommate synthesis (`roommate_intra.md` prompt, `secondary_course_id` + `connection_type` on `roommate_prompts`), and `delete_course` nulls secondary references. Full suite: **160 passed** (100%). |
+| Stage 3 — Owner roadmap (post-Phase-11, plan-mode) | Implemented + suite-verified (owner walkthrough + commit pending) | All 7 tasks implemented in the working tree on top of the v0.6 commit: (1) ⋮ menu → `_course_menu.html` macro (sb/dash/mnav prefixes); (2) mobile `courses-nav-modal` dialog; (3) group-creation discoverability (sidebar Groups nav, New-group button, empty-state link); (4) adaptive topic count (prompt 4–8/12 + 3–15 parser guard); (5) group timeframe pre-fill into sequencing (D-023); (6) `app/fetching/` (SSRF-safe http/extract/youtube) + `sources.course_id/verified_at` + course-level sources; (7) read-before-accept Librarian (`librarian.verify()` + `librarian_verify.md`, three explicit outcomes). Verified 2026-09-14: `python -m pytest -q` → **215 passed, 2 warnings in 25.56s**; re-verified 2026-09-16 at session start (26.51s) and again after the full docs reconciliation (24.93s) — no behavior change in either re-run (comments/docs only). Docs now match the code: D-024 added + D-011 marked superseded, `docs/02` (data model, outbound-fetching pattern, folder layout, real due-check), a new **Stage 3 section in `docs/03-BUILD-PLAN.md`**, `docs/04` §5 outbound-fetch rule, `docs/07` HTMX amendment. Do NOT mark Done until the owner walkthrough is recorded below and the work is committed. |
 
 
 Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
@@ -52,11 +53,19 @@ Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
   pause/archive/resume + manual topic-done persist and
   log to activity_log; restart survival proven by fresh-connection test.
 - Phase 3 (Librarian): from a Topic page, add-a-source form (label +
-  URL/ref) → one LLM triage call → keep/skip/later verdict + good-for +
-  one-line reason persisted to sources; full list keeps skip rows dimmed,
+  URL/ref) → the source is genuinely READ, then judged → kept verdict +
+  a reason grounded in what was read; the list keeps skip rows dimmed and the
   Shelf view filters keep-only; provider/parse errors render inline with
   nothing half-written; each add logs to activity_log; restart-safe.
-- Tests: `python -m pytest -q` → 160 tests as of 2026-09-13 (5 in `tests/test_course_delete.py` + 21 in `tests/test_groups.py`; 100% pass rate).
+  **Retired detail (D-025, 2026-09-16, owner option (a)):** Phase 3 originally judged a
+  source from its description + URL alone (D-011: `librarian.triage()` +
+  `prompts/librarian.md`, one LLM call, no network). That path is now deleted;
+  the live path is read-before-accept (`librarian.verify()`), and the verdict
+  vocabulary (`VERDICTS`) lives in `app/roles/source_store.py` for stored rows.
+- Tests: `python -m pytest -q` → **212 passed, 2 warnings** as of 2026-09-16 post-D-025
+  deletion (was 215 with the 3 triage tests; 100% pass rate; the count was 160
+  at Phase 11 — 21 of those in `tests/test_groups.py` — and Stage 3 added
+  `tests/test_fetching.py` plus read-before-accept Librarian route/unit coverage).
 - Phase 10 (Course Deletion & Context Menus): courses can be permanently deleted
   via `POST /courses/{id}/delete` and `delete_course()` in `course_manage.py`.
   Deletion cascades atomically across all 8 related tables (`topics`, `sources`,
@@ -160,11 +169,22 @@ Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
   regressions.
 
 ## What's left
-- Nothing in the build plan — Phase 8 is done and the initial commit is
-  pushed to the private GitHub remote. Future work should be proposed as new
-  phases appended to `docs/03-BUILD-PLAN.md` per its "After Phase 8" section
-  (e.g. multi-topic Roommate cross-linking, spaced repetition on gap notes,
-  course export).
+- **Stage 3 (owner roadmap) is the only open item:** all 7 tasks are implemented, suite-verified
+  and now documented, but Stage 3 is deliberately NOT marked Done — the owner UI walkthrough and
+  the commit are outstanding (see the Stage 3 row above and `activeContext.md`'s Next step).
+  Untracked and not yet committed: `docs/07-FRONTEND-AUDIT.md` and `docs/Frontend-Mockup` (an
+  extension-less HTML mockup file).
+- **Agent-side pre-flight done 2026-09-16** (on a throwaway copy of the real DB, no LLM calls, no
+  writes to real data): every Stage 3 UI affordance renders from the owner's actual data — ⋮ menus
+  on sidebar/dashboard/mobile (×18 across 3 call sites), mobile `courses-nav-modal`, `Groups` nav
+  link + "New group", the "Create inside a group" Advisor entry point, and the course-level source
+  form. Two facts for the walkthrough: the real DB holds **0 source rows** (so the Librarian step
+  is a from-scratch add, and the per-row "Verify now" path needs an unreadable source kept as
+  `unverified` first), and topic id 1 does not exist (topics are 22–55).
+- Beyond that, nothing in the build plan. Future work should be proposed as new phases appended
+  to `docs/03-BUILD-PLAN.md` (after its Stage 3 section, per the "After Phase 11" note) — e.g.
+  multi-topic Roommate cross-linking, spaced repetition on gap notes, course export, exam
+  simulation.
 
 ## Known issues
 - (none blocking — two Starlette/httpx TestClient deprecation warnings
@@ -177,7 +197,7 @@ Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
   application exposes behaves exactly as recorded in "What currently works"
   above — Advisor (start-a-new-course entry point → five-step one-at-a-time
   interview → draft review/edit → confirm → course page), Librarian
-  (add-a-source → triage verdict → keep-only Shelf), Tutor (start/resume a
+  (add-a-source → read-then-judge verdict → keep-only Shelf), Tutor (start/resume a
   one-question-at-a-time session → gap note), Editor (submit work → structured
   review → done-gating until a review exists), Roommate (fresh-connection
   prompt on dashboard load → Insights journal + reactions), plus the dashboard

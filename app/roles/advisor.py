@@ -101,6 +101,13 @@ def _parse_draft(raw: str) -> CurriculumDraft:
                 time_box=str(item.get("time_box", "") or "").strip(),
             )
         )
+    # Task 4 hardening: an implausible topic count is a model failure —
+    # reject it so build_draft's retry path reruns the LLM once. Bounds are
+    # deliberately wide (3–15): the PROMPT decides the count (derived from
+    # the stated time budget, typically 4–8); this check only catches
+    # degenerate output like a 1-topic or 40-topic filler dump.
+    if not 3 <= len(topics) <= 15:
+        raise ValueError("draft topic count outside 3-15: " + str(len(topics)))
     return CurriculumDraft(course_title=title.strip(), topics=topics)
 
 

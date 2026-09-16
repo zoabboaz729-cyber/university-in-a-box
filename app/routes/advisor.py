@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from pathlib import Path
 
-from app.roles import advisor
+from app.roles import advisor, group_store
 from app.roles.activity import log
 from app.roles.interview_store import get_interview, save_answer, start_interview
 
@@ -26,11 +26,22 @@ def new_interview(request: Request):
 
 
 @router.post("/new")
-def create_interview(topic: str = Form(...)):
+def create_interview(topic: str = Form(...), group_id: str = Form("")):
     topic = topic.strip()
     if not topic:
         return RedirectResponse("/advisor/new", status_code=303)
     interview_id = start_interview(topic)
+    # Task 5 (D-023): "Create inside a group" pre-fills the sequencing
+    # step from the group's uniform timeframe. The interview id IS the
+    # draft course id; drafts stay invisible in group views, so this has
+    # no visibility side effects. set_course_group validates the group.
+    if group_id.strip():
+        try:
+            gid = int(group_id.strip())
+        except ValueError:
+            gid = None
+        if gid is not None:
+            group_store.set_course_group(interview_id, gid)
     log(interview_id, "interview", interview_id, "started")
     return RedirectResponse(f"/advisor/{interview_id}", status_code=303)
 
@@ -39,6 +50,19 @@ def render_step(request: Request, interview_id: int, step: str, interview: dict,
                 error: str = ""):
     """Render exactly one question. Shared by show/edit/submit/review-error."""
     steps = advisor.STEPS
+    saved_answer = interview["answers"].get(step, "")
+    prefill_hint = ""
+    # Task 5 (D-023): pre-fill — never skip — the sequencing step from the
+    # group's uniform timeframe, but ONLY when the step is still empty.
+    # An already-answered step always shows the user's own answer.
+    if step == "sequencing" and not saved_answer.strip():
+        timeframe = group_store.uniform_timeframe_of_course(interview_id)
+        if timeframe is not None:
+            group_name, duration = timeframe
+            saved_answer = duration
+            prefill_hint = (
+                "Pre-filled from " + group_name + "'s timeframe — edit as needed."
+            )
     return templates.TemplateResponse(
         request,
         "advisor_step.html",
@@ -49,7 +73,8 @@ def render_step(request: Request, interview_id: int, step: str, interview: dict,
             "step_number": steps.index(step) + 1,
             "step_count": len(steps),
             "question": advisor.question_for(step),
-            "saved_answer": interview["answers"].get(step, ""),
+            "saved_answer": saved_answer,
+            "prefill_hint": prefill_hint,
             "prev_step": prev_answered(interview["answers"], step),
             "error": error,
         },

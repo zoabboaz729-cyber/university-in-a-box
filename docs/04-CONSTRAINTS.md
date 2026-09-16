@@ -54,6 +54,11 @@ ambiguous ones. Build accordingly:
 - The app is local/single-user by default — do not add network-exposed listeners beyond
   localhost without the user explicitly asking for remote access, and if that's ever asked
   for, treat it as a new phase with its own constraints, not a quick tweak.
+- The one outbound-network capability is reading a source the user explicitly added (D-024).
+  Keep it that way: all such I/O goes through `app/fetching/` behind its SSRF guards (http/https
+  only; private/loopback/link-local/reserved addresses and unsafe redirects refused; size-capped;
+  text truncated by code before it reaches the model). Never fetch a URL the model invented, never
+  let a role module construct a request, and never let refusal paths become crashes.
 
 ## 6. Testing bar
 - Every phase needs at least a minimal automated test that would fail if the phase's core

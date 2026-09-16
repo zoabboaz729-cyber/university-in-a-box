@@ -43,6 +43,23 @@ rationale for the defaults below lives in `docs/02-ARCHITECTURE.md`.*
   (dashboard provider raises ProviderError so older tests stay network-free;
   settings env keys reset so one test's POST can't leak into the next).
   Phase 6 tests re-patch their own FakeProvider.
+- Stage 3 (post-Phase-11 owner roadmap) live, all 7 tasks implemented +
+  suite-verified 2026-09-14 and re-verified 2026-09-16 after the docs
+  reconciliation (215 passed, 2 warnings both times) but UNCOMMITTED: Task 1 `_course_menu.html` macro (sb/dash/mnav
+  prefixes) — `base.html` uses it, `index.html` uses `course_row`; Task 2
+  mobile `courses-nav-modal` dialog + `#mobile-courses-btn`; Task 3
+  discoverability (sidebar Groups nav, dashboard New-group button,
+  empty-state link); Task 4 adaptive topic count (prompt 4–8/12 + 3–15
+  parser guard); Task 5 group timeframe pre-fill (D-023, sequencing only,
+  empty-step guard); Task 6 `app/fetching/` (SSRF-safe http/extract/youtube,
+  page/PDF/transcript → truncated text) + `sources.course_id/verified_at` +
+  course-level sources; Task 7 read-before-accept Librarian
+  (`roles/librarian.verify()` + `librarian_verify.md`, three outcomes,
+  per-row Verify-now). New deps: youtube-transcript-api + pypdf. The live
+  judging contract is recorded as **D-024** ("routes own the fetch, roles
+  own the judgment"); the old description-only triage() path was deleted per
+  owner decision (a), recorded as **D-025** (`VERDICTS` moved to its live
+  consumer `app/roles/source_store.py`, which validates stored rows with it).
 - Phase 7 completion live: `app/monitor.py` (stdlib logging →
   `data/app.log`, idempotent per DATA_DIR) wired in `main.py` lifespan +
   unhandled-exception middleware + `ai/provider.py` final-retry warning;

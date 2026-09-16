@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% import "_course_menu.html" as cm %}
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -19,10 +20,18 @@
       <a class="nav-item{% if request.url.path.startswith('/roommate') %} active{% endif %}" href="/roommate">
         <span class="nav-dot"></span>Insights
       </a>
+      <a class="nav-item{% if request.url.path.startswith('/groups') %} active{% endif %}" href="/groups">
+        <span class="nav-dot"></span>Groups
+      </a>
       <a class="nav-item{% if request.url.path.startswith('/settings') %} active{% endif %}" href="/settings">
         <span class="nav-dot"></span>Settings
       </a>
     </nav>
+
+    <button type="button" id="mobile-courses-btn" class="mobile-courses-btn"
+            onclick="openCoursesNav()" aria-haspopup="dialog">
+      Courses <span aria-hidden="true">▾</span>
+    </button>
 
     <div>
       <div class="nav-label-row">
@@ -49,29 +58,7 @@
                   {{ c.done_topics }} / {{ c.total_topics }} topics
                 </span>
               </a>
-              <div class="course-menu-wrap">
-                <button type="button" class="course-menu-btn" aria-label="Options for {{ c.title }}" title="Course options"
-                        onclick="toggleCourseMenu(event, 'sb-menu-{{ c.id }}')">
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                    <circle cx="8" cy="3" r="1.5"/>
-                    <circle cx="8" cy="8" r="1.5"/>
-                    <circle cx="8" cy="13" r="1.5"/>
-                  </svg>
-                </button>
-                <div id="sb-menu-{{ c.id }}" class="course-menu-dropdown" style="display:none;">
-                  <a href="/courses/{{ c.id }}" class="course-menu-item">
-                    <span>↗ Open course</span>
-                  </a>
-                  <button type="button" class="course-menu-item"
-                          onclick="closeAllCourseMenus(); openGroupModal('{{ c.id }}', '{{ c.title | escape }}', window.location.pathname, {{ c.group_id if c.group_id is not none else 'null' }})">
-                    <span>📁 Group / Semester…</span>
-                  </button>
-                  <button type="button" class="course-menu-item course-menu-item-danger"
-                          onclick="closeAllCourseMenus(); openDeleteModal('{{ c.id }}', '{{ c.title | escape }}')">
-                    <span>🗑 Delete course</span>
-                  </button>
-                </div>
-              </div>
+              {{ cm.course_menu(c, 'sb-menu-') }}
             </div>
             {% endfor %}
             </div>
@@ -86,29 +73,7 @@
                 {{ c.done_topics }} / {{ c.total_topics }} topics
               </span>
             </a>
-            <div class="course-menu-wrap">
-              <button type="button" class="course-menu-btn" aria-label="Options for {{ c.title }}" title="Course options"
-                      onclick="toggleCourseMenu(event, 'sb-menu-{{ c.id }}')">
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                  <circle cx="8" cy="3" r="1.5"/>
-                  <circle cx="8" cy="8" r="1.5"/>
-                  <circle cx="8" cy="13" r="1.5"/>
-                </svg>
-              </button>
-              <div id="sb-menu-{{ c.id }}" class="course-menu-dropdown" style="display:none;">
-                <a href="/courses/{{ c.id }}" class="course-menu-item">
-                  <span>↗ Open course</span>
-                </a>
-                <button type="button" class="course-menu-item"
-                        onclick="closeAllCourseMenus(); openGroupModal('{{ c.id }}', '{{ c.title | escape }}', window.location.pathname, {{ c.group_id if c.group_id is not none else 'null' }})">
-                  <span>📁 Group / Semester…</span>
-                </button>
-                <button type="button" class="course-menu-item course-menu-item-danger"
-                        onclick="closeAllCourseMenus(); openDeleteModal('{{ c.id }}', '{{ c.title | escape }}')">
-                  <span>🗑 Delete course</span>
-                </button>
-              </div>
-            </div>
+            {{ cm.course_menu(c, 'sb-menu-') }}
           </div>
           {% endfor %}
           {% endif %}
@@ -192,6 +157,48 @@
   </div>
 </dialog>
 
+{# Mobile-only course/group navigation dialog (Task 2). The 760px media
+   query hides the sidebar's inline course list, so phones reach every
+   course's ⋮ menu through this dialog instead. Same sidebar_groups() data,
+   same course_menu macro — ids use the mnav-menu- prefix so they stay
+   unique next to sb-menu- and dash-menu-. #}
+<dialog id="courses-nav-modal" class="reading-modal" aria-label="Your courses">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 class="modal-title">Your courses</h3>
+      <button type="button" class="modal-close-btn" aria-label="Close"
+              onclick="document.getElementById('courses-nav-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body courses-nav-body">
+      {% set groups_nav = sidebar_groups() %}
+      {% if groups_nav %}
+        {% for block in groups_nav %}
+          {% if block.group %}
+          <details class="sidebar-group"{% if block.courses %} open{% endif %}>
+            <summary class="sidebar-group-head" title="{{ block.group.timeframe_duration or block.group.timeframe_mode }}">
+              <span class="sidebar-group-caret">▾</span>
+              <span class="sidebar-group-name">{{ block.group.name }}</span>
+              <span class="sidebar-group-meta">{{ block.courses | length }} course{{ "s" if block.courses | length != 1 else "" }}</span>
+            </summary>
+            <div class="sidebar-group-courses">
+              {% for c in block.courses %}
+              {{ cm.nav_course_row(c, 'mnav-menu-') }}
+              {% endfor %}
+            </div>
+          </details>
+          {% else %}
+            {% for c in block.courses %}
+            {{ cm.nav_course_row(c, 'mnav-menu-') }}
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+      <p class="courses-nav-empty">No courses yet. <a href="/advisor/new">Start a new course</a>.</p>
+      {% endif %}
+    </div>
+  </div>
+</dialog>
+
 <script>
 function toggleCourseMenu(e, menuId) {
   e.stopPropagation();
@@ -218,6 +225,32 @@ document.addEventListener('click', function(e) {
   }
 });
 
+function showVerifying(form) {
+  // Reading a source can take ~10s (fetch + one LLM call). Disable the
+  // button and swap its label so the UI never looks frozen, and reveal
+  // the form's own pending note. Returns true so the POST still happens.
+  var btn = form.querySelector('button[type="submit"]');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Verifying…';
+  }
+  var note = form.querySelector('.verifying-note');
+  if (note) {
+    note.style.display = 'block';
+  }
+  return true;
+}
+
+function openCoursesNav() {
+  var d = document.getElementById('courses-nav-modal');
+  if (!d) return;
+  if (typeof d.showModal === 'function') {
+    d.showModal();
+  } else {
+    d.setAttribute('open', '');
+  }
+}
+
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeAllCourseMenus();
@@ -228,6 +261,13 @@ document.addEventListener('keydown', function(e) {
     var gModal = document.getElementById('group-assign-modal');
     if (gModal && gModal.open) {
       gModal.close();
+    }
+    // Only close the mobile nav dialog if it is the topmost open dialog —
+    // if the delete/group modal opened on top of it, Escape should peel
+    // that one off first, not dismiss both at once.
+    var cNav = document.getElementById('courses-nav-modal');
+    if (cNav && cNav.open && !(modal && modal.open) && !(gModal && gModal.open)) {
+      cNav.close();
     }
   }
 });

@@ -9,9 +9,12 @@ manual regression checklist.
 Call order of the scripted LLM replies:
   0  Advisor draft (built when the 5th interview answer is submitted)
   1  Roommate first prompt (dashboard load after course confirm)
-  2-4 Librarian verdicts for the three added sources
-  5-7 Tutor: opening question, follow-up, gap note
-  8  Editor review
+  2  Librarian verification of the readable, accepted source
+  3  Librarian verification of the readable, rejected source
+     (the third attempt cannot be fetched at all, so it never reaches the
+     model — the user keeps it explicitly unverified instead)
+  4-6 Tutor: opening question, follow-up, gap note
+  7  Editor review
 """
 import sqlite3
 
@@ -35,7 +38,11 @@ ANSWERS = {
 DRAFT = (
     '{"course_title": "Test Course", "topics": ['
     '{"title": "T1", "milestone_description": "Write a one-page summary.", '
-    '"time_box": "1 week"}]}'
+    '"time_box": "1 week"}, '
+    '{"title": "T2", "milestone_description": "Solve five practice problems.", '
+    '"time_box": "1 week"}, '
+    '{"title": "T3", "milestone_description": "Explain it aloud.", '
+    '"time_box": "2 weeks"}]}'
 )
 ROOMMATE = (
     '{"field": "architecture", "prompt": "Consider how an architect would '
@@ -43,9 +50,16 @@ ROOMMATE = (
     'parts - which parts of Spanish must carry meaning, and which are '
     'ornament you can defer?"}'
 )
-LIB_KEEP = '{"verdict": "keep", "good_for": "core grounding", "reason": "covers the fundamentals clearly"}'
-LIB_SKIP = '{"verdict": "skip", "good_for": "none", "reason": "clickbait with no sources"}'
-LIB_LATER = '{"verdict": "later", "good_for": "extension", "reason": "useful only after the basics"}'
+VERIFY_KEEP = (
+    '{"accepted": true, "fit": "core grounding in the topic", '
+    '"credibility": "a published textbook with sources", "access": "free", '
+    '"reason": "Read it - the fundamentals are covered clearly."}'
+)
+VERIFY_REJECT = (
+    '{"accepted": false, "fit": "covers nothing in this milestone", '
+    '"credibility": "thin marketing page", "access": "unknown", '
+    '"reason": "Read it - it is a sales pitch with no content."}'
+)
 TUTOR_Q1 = '{"question": "What exactly does the subjunctive express that English lacks?"}'
 TUTOR_Q2 = '{"question": "And how would you translate this sentence using it, out loud?"}'
 GAP_NOTE = '{"gap_note": "The user\'s grasp of the Spanish subjunctive is still fragile."}'
@@ -57,10 +71,25 @@ EDITOR_REVIEW = (
 
 REPLIES = [
     DRAFT, ROOMMATE,
-    LIB_KEEP, LIB_SKIP, LIB_LATER,
+    VERIFY_KEEP, VERIFY_REJECT,
     TUTOR_Q1, TUTOR_Q2, GAP_NOTE,
     EDITOR_REVIEW,
 ]
+
+# A URL the fake fetcher refuses to read, so the third source attempt lands
+# in Task 7's outcome 3 (unavailable) and spends no LLM call at all.
+UNREADABLE_URL = "https://blocked.example/gone"
+
+
+def fake_fetch(url):
+    """Stand-in for app.fetching.fetch_source_text — no live network."""
+    from app.fetching import FetchedSource
+
+    if url == UNREADABLE_URL:
+        return FetchedSource(ok=False, kind="", text="",
+                             reason="that site refused the fetch (HTTP 403)")
+    return FetchedSource(ok=True, kind="page", reason="",
+                         text="Readable page text about Spanish pronouns.")
 
 
 class FakeProvider:
@@ -91,6 +120,8 @@ def make_client(tmp_path, monkeypatch):
         "app.routes.tutor",
     ):
         monkeypatch.setattr(module + ".get_provider", lambda: provider)
+    # No live network in the suite: the Librarian's mandatory read is faked.
+    monkeypatch.setattr("app.routes.librarian.fetch_source_text", fake_fetch)
     return TestClient(api), provider
 
 
@@ -162,33 +193,58 @@ def test_full_alter_loop_and_restart(tmp_path, monkeypatch):
         _time.sleep(0.05)
     assert prompt_row is not None and prompt_row["field"] == "architecture"
 
-    # --- Phase 3: Librarian ---
-    # NOTE: the scripted reply queue must skip past the advisor DRAFT (call 0)
-    # and the Roommate due-check (call 1) before the three LIB_* verdicts.
-    # provider.calls is left alone — the test only asserts the persisted rows.
-    for i, (label, ref) in enumerate(
-        [("Strong textbook", "https://book.example.org"),
-         ("Click bait blog", "https://blog.example/xyz"),
-         ("Maybe article", "https://papers.example/abc")]
-    ):
-        resp = client.post(
-            f"/topics/{topic_id}/sources",
-            data={"label": label, "reference": ref},
-            follow_redirects=False,
-        )
-        assert resp.status_code == 303, (
-            f"source {i} not accepted (status {resp.status_code}): "
-            f"{resp.text[:300]}"
-        )
+    # --- Phase 3: Librarian (every source is READ before it is accepted) ---
+    # The scripted queue has already spent calls 0 (advisor DRAFT) and 1
+    # (Roommate due-check), so the next replies are the verification
+    # judgments. Outcome 3 spends no LLM call — an unread source cannot be
+    # judged, and the app says so instead of guessing.
+    resp = client.post(
+        f"/topics/{topic_id}/sources",
+        data={"label": "Strong textbook",
+              "reference": "https://book.example.org"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303, resp.text[:300]
+
+    # Outcome 2: read and rejected — reasons shown, nothing persisted.
+    resp = client.post(
+        f"/topics/{topic_id}/sources",
+        data={"label": "Click bait blog", "reference": "https://blog.example/xyz"},
+    )
+    assert resp.status_code == 200
+    assert "said no" in resp.text
+    assert "sales pitch with no content" in resp.text
+
+    # Outcome 3: the fetch fails, so the app asks instead of deciding.
+    resp = client.post(
+        f"/topics/{topic_id}/sources",
+        data={"label": "Maybe article", "reference": UNREADABLE_URL},
+    )
+    assert resp.status_code == 200
+    assert "read that source" in resp.text
+    assert "refused the fetch" in resp.text
+    # ... and the user chooses to keep it, visibly unverified.
+    resp = client.post(
+        f"/topics/{topic_id}/sources",
+        data={"label": "Maybe article", "reference": UNREADABLE_URL,
+              "decision": "keep_unverified"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
     from app.roles.source_store import list_sources
     rows = list_sources(topic_id)
-    verdicts = {r["label"]: r["verdict"] for r in rows if r["verdict"]}
+    verdicts = {r["label"]: r["verdict"] for r in rows}
+    verified_at = {r["label"]: r["verified_at"] for r in rows}
     assert verdicts["Strong textbook"] == "keep"
-    assert verdicts["Click bait blog"] == "skip"
-    assert verdicts["Maybe article"] == "later"
+    assert "Click bait blog" not in verdicts     # rejected → never stored
+    assert verdicts["Maybe article"] == "unverified"
+    assert verified_at["Strong textbook"] is not None
+    assert verified_at["Maybe article"] is None  # kept, but never read
     shelf = client.get(f"/topics/{topic_id}/shelf").text
     assert "Strong textbook" in shelf
-    assert "Click bait blog" not in shelf  # skip rows never reach the Shelf
+    assert "Click bait blog" not in shelf   # skip rows never reach the Shelf
+    assert "Maybe article" not in shelf     # unverified is not a keep
 
     # --- Phase 4: Tutor (one question at a time → gap note) ---
     resp = client.post(f"/topics/{topic_id}/tutor/start", follow_redirects=False)

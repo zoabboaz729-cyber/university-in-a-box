@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_sources.html" as src %}
 {% block title %}{{ course.title }} — University in a Box{% endblock %}
 
 {% block content %}
@@ -10,6 +11,10 @@
     <span class="pill {{ course.status }}">{{ course.status | replace("_", " ") | title }}</span>
   </p>
 </div>
+
+{% if error %}
+<div class="callout callout-error">{{ error }}</div>
+{% endif %}
 
 <div class="course-actions" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
   <form method="post" action="/courses/{{ course.id }}/status" style="display:inline-flex;gap:0.5rem;align-items:center;margin:0;">
@@ -70,4 +75,25 @@
 {% else %}
 <div class="callout callout-info">No topics yet.</div>
 {% endif %}
+
+<!-- ── Course-level sources (Stage 3 Task 7) ───────────── -->
+<div class="topic-section" style="margin-top:2rem">
+  <div class="section-head">
+    <h2>Course sources</h2>
+  </div>
+  <p style="font-size:.82rem;color:var(--ink-soft);margin-bottom:.8rem">
+    Sources for the course as a whole, not tied to one topic. Each is read
+    and judged before it is accepted.
+  </p>
+
+  {{ src.add_form("course", course.id, "/courses/" ~ course.id) }}
+
+  {% if sources %}
+  {{ src.rows("course", course.id, sources, "/courses/" ~ course.id) }}
+  {% else %}
+  <p style="color:var(--ink-soft);font-size:.88rem">
+    No course-level sources yet. Add one above.
+  </p>
+  {% endif %}
+</div>
 {% endblock %}

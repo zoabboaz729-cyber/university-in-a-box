@@ -55,12 +55,19 @@ CREATE INDEX IF NOT EXISTS idx_advisor_interviews_course
 
 CREATE TABLE IF NOT EXISTS sources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    topic_id INTEGER NOT NULL REFERENCES topics(id),
+    -- Exactly one of topic_id / course_id is non-null (app-layer rule):
+    -- a source attaches to a single Topic OR to the Course as a whole.
+    -- topic_id is nullable since Stage 3 Task 6 (course-level sources).
+    topic_id INTEGER REFERENCES topics(id),
+    course_id INTEGER REFERENCES courses(id),
     label TEXT NOT NULL,
     url_or_reference TEXT,
     verdict TEXT,
     reason TEXT,
-    added_at TEXT NOT NULL DEFAULT (datetime('now'))
+    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    -- Stage 3 Task 6: set when the source has actually been fetched and
+    -- judged by the Librarian's verify(); NULL = unverified (shown as such).
+    verified_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tutor_sessions (

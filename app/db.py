@@ -146,6 +146,41 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "TEXT NOT NULL DEFAULT 'external'"
         )
 
+    # ---- Stage 3 Task 6: source verification -----------------------------
+    # sources needs course_id + verified_at, and topic_id must become
+    # nullable (a source attaches to a Topic OR the Course). SQLite cannot
+    # ALTER a column's NOT NULL flag, so this is a rebuild: new table →
+    # copy every row → drop → rename. Idempotent (skipped once columns
+    # exist and topic_id is nullable); every existing row survives.
+    # PRAGMA rows are (cid, name, type, notnull, ...) — indexed, not keyed,
+    # to match the steps above and stay indifferent to row_factory.
+    source_info = {row[1]: row for row in conn.execute("PRAGMA table_info(sources)")}
+    if ("topic_id" not in source_info
+            or "course_id" not in source_info
+            or "verified_at" not in source_info
+            or source_info["topic_id"][3]):
+        conn.execute(
+            "CREATE TABLE sources_migrated ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "topic_id INTEGER REFERENCES topics(id), "
+            "course_id INTEGER REFERENCES courses(id), "
+            "label TEXT NOT NULL, "
+            "url_or_reference TEXT, "
+            "verdict TEXT, "
+            "reason TEXT, "
+            "added_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "verified_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO sources_migrated "
+            "(id, topic_id, course_id, label, url_or_reference, verdict, "
+            " reason, added_at, verified_at) "
+            "SELECT id, topic_id, NULL, label, url_or_reference, verdict, "
+            "       reason, added_at, NULL FROM sources"
+        )
+        conn.execute("DROP TABLE sources")
+        conn.execute("ALTER TABLE sources_migrated RENAME TO sources")
+
 def init_db() -> Path:
     """Create all tables if they don't exist yet. Safe to call on every boot."""
     path = get_db_path()

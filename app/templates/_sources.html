@@ -1,0 +1,63 @@
+{# Add-a-source form. Every submission is read + judged (Stage 3 Task 7),
+   so the button shows a pending state instead of looking frozen. #}
+{% macro add_form(scope, scope_id, next_path) %}
+<div class="card" style="margin-bottom:1rem">
+  <h3 style="font-size:.9rem;margin-bottom:.5rem">Add a source</h3>
+  <p style="font-size:.82rem;color:var(--ink-soft);margin-bottom:.8rem">
+    Every source is read before it is accepted — the page text, a PDF's
+    text, or a video's transcript. That takes a few seconds.
+  </p>
+  <form method="post" action="/{{ scope }}s/{{ scope_id }}/sources"
+        onsubmit="return showVerifying(this)">
+    <div class="form-group">
+      <label for="{{ scope }}-src-label">Label</label>
+      <input id="{{ scope }}-src-label" name="label" type="text" required
+             placeholder="e.g. Chapter 3 of Thinking, Fast and Slow">
+    </div>
+    <div class="form-group">
+      <label for="{{ scope }}-src-ref">URL or reference (optional)</label>
+      <input id="{{ scope }}-src-ref" name="reference" type="text"
+             placeholder="https://…">
+    </div>
+    <input type="hidden" name="next" value="{{ next_path }}">
+    <button class="btn btn-primary btn-sm" type="submit">Add source</button>
+    <p class="verifying-note" style="display:none">
+      Reading the source and judging it — this can take a few seconds…
+    </p>
+  </form>
+</div>
+{% endmacro %}
+
+{# One row per source: verdict, whether it was actually READ, and a
+   Verify-now action for anything still unverified (including every row
+   that existed before verification was introduced). #}
+{% macro rows(scope, scope_id, sources, next_path) %}
+<div class="source-list">
+  {% for source in sources %}
+  <div class="source-item{% if source.verdict == 'skip' %} skipped{% endif %}">
+    <div>
+      <p class="source-label">{{ source.label }}</p>
+      <p class="source-reason">{{ source.reason }}</p>
+      {% if source.url_or_reference %}
+      <p class="source-ref">{{ source.url_or_reference }}</p>
+      {% endif %}
+    </div>
+    <div class="source-verdict">
+      <span class="pill {{ source.verdict }}">{{ source.verdict | title }}</span>
+      {% if source.verified_at %}
+      <span class="source-status verified">Read {{ source.verified_at }}</span>
+      {% else %}
+      <span class="source-status unverified">Unverified — not read</span>
+      <form method="post"
+            action="/{{ scope }}s/{{ scope_id }}/sources/{{ source.id }}/verify"
+            onsubmit="return showVerifying(this)">
+        <input type="hidden" name="next" value="{{ next_path }}">
+        <button class="btn btn-secondary btn-sm" type="submit">Verify now</button>
+        <p class="verifying-note" style="display:none">Reading it now…</p>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}

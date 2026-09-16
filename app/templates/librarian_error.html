@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Source not added — University in a Box{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Source not added</h1>
+</div>
+
+<div class="callout callout-error">{{ message }}</div>
+
+<p style="margin-top:1.25rem">
+  <a class="btn btn-secondary btn-sm" href="{{ back if back is defined else '/' }}">Back</a>
+</p>
+{% endblock %}

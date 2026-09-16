@@ -4,6 +4,90 @@
 changes. Newest at the top. These are defaults set during planning; they're changeable, not
 commandments — but changing one should get its own entry explaining why.*
 
+### D-025 — Delete the description-only triage() path (owner option (a))
+**Date:** 2026-09-16 (Stage 3 close-out; owner chose option (a) from activeContext "Open questions")
+**Context:** After Stage 3 Task 7 rewired every Librarian route to `librarian.verify()`,
+`triage()` + `_parse_verdict()` + `SourceVerdict` + `PROMPT_FILE` (roles/librarian.py),
+`prompts/librarian.md`, and the 3 triage tests were unreachable from any app code — only
+their own tests exercised them. The owner asked for the trade-offs; option (a) was deletion.
+**Decision:** Delete the dead path: `triage()`, `_parse_verdict()`, `SourceVerdict`,
+`PROMPT_FILE`, `prompts/librarian.md`, and the 3 triage tests in `tests/test_librarian.py`.
+`VERDICTS` was NOT deleted — it moved into its live consumer `app/roles/source_store.py`,
+which validates the verdict column with it (existing rows, including pre-Task-7 legacy
+rows, still carry keep/skip/later, and the Shelf filter is verdict = 'keep').
+**Consequences:** One judgment path per role (`verify()` + `librarian_verify.md`). The
+only no-read judgment left is the explicit user-chosen `unverified` keep — never a model
+verdict on unread text. This supersedes the "kept as-is" note on D-011.
+
+---
+
+### D-024 — The Librarian READS a source before accepting it (reverses "the model never fetches the URL")
+**Date:** 2026-09-14 (Stage 3 Task 7, owner roadmap; entry written 2026-09-16 — the code already
+cited this entry, but it had never been added to the log)
+**Context:** Phase 3 (D-011) had the Librarian make one judgment call from a source's
+label/URL/description alone and explicitly never read the source (`roles/librarian.py` said so).
+The owner's Stage 3 roadmap asked for a source recommendation + verification engine; the Stage 2
+investigation confirmed no web-fetching capability existed anywhere in the app, and Task 7
+delivered the read-before-accept flow.
+**Decision:**
+1. Nothing is stored as *verified* without having been read. The route fetches the URL
+   (`app/fetching/`, SSRF-guarded: http/https only, private/loopback/link-local/reserved
+   addresses refused, redirects re-validated), then `librarian.verify()` judges fit,
+   credibility, and access from the fetched text — HTML page, PDF text, or YouTube transcript.
+2. Exactly one of three explicit outcomes per attempt — never a crash, never a silent accept:
+   (a) **verified-accept** — row persisted (new) or updated (existing) with `verified_at` set,
+   judgment shown on the row; (b) **verified-reject** — visible reasons, nothing persisted (an
+   existing row is removed and the message says so); (c) **unavailable** — the fetch/extract/
+   transcript failed, so the app asks the user to retry, discard, or keep it permanently badged
+   `unverified` (`verified_at` stays NULL, verdict `unverified` — never a fabricated keep/skip).
+3. A source attaches to exactly ONE scope: a Topic OR the Course as a whole
+   (`sources.topic_id` / `sources.course_id`, app-layer rule, `topic_id` now nullable).
+4. Rows that predate verification (`verified_at` NULL) become verified per-row, on demand, via
+   the Verify-now action — never a silent bulk re-fetch.
+5. Boundary rule (same shape as `app/ai/`): routes own the fetch, roles own the judgment; no
+   network I/O is constructed inside roles or templates, and the model is never handed a URL to
+   fetch itself.
+**Implemented:** `app/fetching/` (`http.py`, `extract.py`, `youtube.py`), 
+`app/roles/prompts/librarian_verify.md`, `librarian.verify()`, rewritten `app/routes/librarian.py`
+(4 POST routes + Shelf), `sources.course_id` / `sources.verified_at` (schema + idempotent
+`db._migrate()`), templates `librarian_unavailable.html` / `librarian_verdict.html` /
+`_sources.html`. Full suite 215 passed (2026-09-14).
+**Consequences:** The Phase 3 statement that the Librarian never fetches anything no longer holds
+— see the "Superseded" note on D-011. Cost per added/re-verified source is one fetch + one LLM
+call (the text is truncated by code in `app.fetching`, never by a summarizing LLM call). An
+unreadable source is a first-class, user-visible outcome rather than an error page.
+`roles/librarian.py` and `routes/librarian.py` cite THIS entry.
+
+---
+### D-023 — Group timeframe pre-fills the Advisor sequencing answer (pre-fill, not skip; text only)
+**Date:** 2026-09-14 (Stage 3 Task 5; owner decision baked in per Stage 2 recommendation)
+**Context:** Owner wanted properties defined on a Group to become defaults for courses
+created inside it. The only group property that is answer-shaped is `timeframe_duration`
+on `uniform` groups. Two boundary crossings were reviewed in Stage 2: (a) pre-fill vs.
+hard-skip of the sequencing question, (b) display-only status of the duration.
+**Decision:**
+1. PRE-FILL, not skip: the sequencing question stays visible with the group's
+   duration filled in as the answer, plus a visible hint ("Pre-filled from
+   {group name}'s timeframe — edit as needed."). The deterministic five-step
+   interview contract, `next_step`, and `save_answer` are untouched.
+2. Text inheritance only: the duration is free text flowing through the
+   existing form → save_answer path. No new columns, no duration arithmetic,
+   no scheduling/week-math of any kind (numeric `time_box` stays out of scope).
+3. Guard: pre-fill applies ONLY to an empty step — an already-answered step
+   always shows the user's own answer (back-button edits included).
+**Implemented:** `group_store.uniform_timeframe_of_course()` +
+`Advisor "Create inside a group" <select>` (only rendered when the account
+has ≥1 group) + `render_step` pre-fill logic + visible hint in
+`advisor_step.html`. `group_store.py` docstring amended (no longer claims
+pure display-only). Owner note: hard-skip was explicitly rejected — it buys
+almost nothing and hides inherited context from the user.
+**Consequences:** Courses created inside a uniform group start from the
+group's stated timeframe; editing before submitting persists the edited
+value. Scheduling math remains out of scope until a numeric-`time_box`
+parent decision is made.
+
+---
+
 ### D-022 — Course Groups / Semesters architecture & multi-course insights choices
 **Date:** 2026-09-13 (Phase 11 planning; approved by owner)
 **Context:** The owner approved coupling courses into Groups (e.g. "Semester 1",
@@ -317,6 +401,12 @@ that's a new decision entry.
 
 ---
 ### D-011 — Phase 3: one LLM triage call per source; good_for folded into reason
+**Superseded twice: first for the live add-a-source path by D-024 (Stage 3 Task 7,
+2026-09-14), then fully RETIRED by D-025 (2026-09-16, owner option (a)):**
+`triage()` + `_parse_verdict()` + `SourceVerdict` + `PROMPT_FILE` +
+`prompts/librarian.md` + the 3 triage tests are deleted. The live contract is
+D-024 + D-025; the verdict vocabulary (`VERDICTS`) lives on in
+`app/roles/source_store.py` for stored rows only.
 **Date:** 2026-09-11 (Phase 3 build)
 **Context:** The vision wants per-source what-it's-good-for + verdict +
 one-line reason, but the schema has sources(reason) and no good_for

@@ -414,6 +414,9 @@ a.course-row:hover { background: #F3EFE7; text-decoration: none; }
 .pill.keep     { background: var(--accent-soft); color: var(--accent-ink); }
 .pill.skip     { background: var(--danger-soft); color: var(--danger-ink); }
 .pill.later    { background: var(--gold-soft); color: var(--gold-ink); }
+/* A source the app could not read keeps keep/skip/later undefined: it
+   says "unverified" instead of pretending to a verdict (Stage 3 Task 7). */
+.pill.unverified { background: var(--hairline); color: var(--ink-faint); }
 .pill.in_progress { background: var(--accent-soft); color: var(--accent-ink); }
 
 /* ---- Buttons --------------------------------------------- */
@@ -668,6 +671,24 @@ input[type="checkbox"] {
 .source-label { font-weight: 600; font-size: 0.88rem; margin: 0 0 0.2rem; }
 .source-reason { font-size: 0.82rem; color: var(--ink-soft); margin: 0; }
 .source-ref { font-size: 0.78rem; color: var(--ink-faint); margin: 0.2rem 0 0; word-break: break-all; }
+
+/* ---- Verification state (Stage 3 Task 7) ------------------ */
+.source-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  text-align: right;
+}
+.source-status { font-size: 0.72rem; }
+.source-status.verified { color: var(--ink-faint); }
+.source-status.unverified { color: var(--gold-ink); font-weight: 600; }
+.source-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.2rem 0 0; }
+.verifying-note {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin: 0.5rem 0 0;
+}
 
 /* ---- Review card (editor) -------------------------------- */
 .review-card {
@@ -1193,6 +1214,47 @@ details > p { font-size: 0.84rem; color: var(--ink-soft); }
 .group-edit summary.danger-summary { color: var(--danger-ink); }
 .group-edit .form-group { margin-bottom: 0.6rem; }
 
+/* ---- Mobile course/group navigation (Task 2) -------------- */
+/* Desktop: the sidebar's inline course list is always visible, so the
+   "Courses ▾" trigger stays hidden. Under 760px (media query below) the
+   inline list is hidden and this button opens #courses-nav-modal. */
+.mobile-courses-btn {
+  display: none;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-card);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.mobile-courses-btn:hover { background: var(--hairline); }
+.courses-nav-body {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+.courses-nav-empty { color: var(--ink-soft); font-size: 0.88rem; margin: 0.5rem 0 0; }
+/* The ⋮ dropdown is absolutely positioned elsewhere; inside this dialog the
+   scrollable body would clip it. Render menus in normal flow here instead —
+   they push the rows below down and are never cut off. */
+#courses-nav-modal .course-menu-wrap {
+  flex-direction: column;
+  align-items: stretch;
+}
+#courses-nav-modal .course-menu-dropdown {
+  position: static;
+  min-width: 0;
+  width: 100%;
+}
+
 /* ---- Responsive (mobile) --------------------------------- */
 @media (max-width: 760px) {
   .shell {
@@ -1212,6 +1274,7 @@ details > p { font-size: 0.84rem; color: var(--ink-soft); }
   .wordmark { white-space: nowrap; }
   .nav-group { flex-direction: row; }
   .sidebar > div:last-child { display: none; } /* hide course list on mobile */
+  .mobile-courses-btn { display: inline-flex; } /* phone route to course/group nav */
   main { padding: 1.5rem 1.25rem 3rem; }
   .course-row { grid-template-columns: 1fr; }
   .course-side { text-align: left; flex-direction: row; flex-wrap: wrap; }

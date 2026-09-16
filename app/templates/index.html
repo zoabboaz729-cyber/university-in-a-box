@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_course_menu.html" as cm %}
 {% block title %}Dashboard — University in a Box{% endblock %}
 
 {% block content %}
@@ -44,6 +45,7 @@
     {% endfor %}
     <a class="filter-pill{% if group_filter == 'none' %} active{% endif %}" href="/?group=none">Ungrouped</a>
   </div>
+  <a class="btn btn-secondary btn-sm" href="/groups">New group</a>
   <a class="btn btn-primary btn-sm" href="/advisor/new">Start a new course</a>
 </div>
 
@@ -77,29 +79,7 @@
   <div class="course-side">
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:0.5rem">
       <span class="pill {{ row_course.status }}">{{ row_course.status }}</span>
-      <div class="course-menu-wrap">
-        <button type="button" class="course-menu-btn" aria-label="Options for {{ row_course.title }}" title="Course options"
-                onclick="toggleCourseMenu(event, 'dash-menu-{{ row_course.id }}')">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <circle cx="8" cy="3" r="1.5"/>
-            <circle cx="8" cy="8" r="1.5"/>
-            <circle cx="8" cy="13" r="1.5"/>
-          </svg>
-        </button>
-        <div id="dash-menu-{{ row_course.id }}" class="course-menu-dropdown" style="display:none;">
-          <a href="/courses/{{ row_course.id }}" class="course-menu-item">
-            <span>↗ Open course</span>
-          </a>
-          <button type="button" class="course-menu-item"
-                  onclick="closeAllCourseMenus(); openGroupModal('{{ row_course.id }}', '{{ row_course.title | escape }}', window.location.pathname, {{ row_course.group_id if row_course.group_id is not none else 'null' }})">
-            <span>📁 Group / Semester…</span>
-          </button>
-          <button type="button" class="course-menu-item course-menu-item-danger"
-                  onclick="closeAllCourseMenus(); openDeleteModal('{{ row_course.id }}', '{{ row_course.title | escape }}')">
-            <span>🗑 Delete course</span>
-          </button>
-        </div>
-      </div>
+      {{ cm.course_menu(row_course, 'dash-menu-') }}
     </div>
     {% if row_course.days_since_activity is not none %}
     <span style="display:block;margin-top:0.35rem">active {{ row_course.days_since_activity }} day(s) ago</span>
@@ -150,6 +130,8 @@
 <div class="callout callout-info">
   No courses yet. Use <strong>Start a new course</strong> above —
   the Advisor will interview you and build your curriculum.
+  Prefer to organize first? <a href="/groups">Create a group</a>
+  (a semester or track) and file courses into it as you add them.
 </div>
 {% endif %}
 {% endblock %}

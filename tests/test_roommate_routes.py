@@ -306,7 +306,7 @@ def test_dashboard_does_not_block_on_generation(tmp_path, monkeypatch):
 
     class Slow:
         def generate(self, s, u):
-            time.sleep(0.5)
+            time.sleep(2.0)
             return json.dumps({"field": "architecture", "prompt": "slow"})
 
     monkeypatch.setattr("app.routes.dashboard.get_provider", lambda: Slow())
@@ -315,9 +315,13 @@ def test_dashboard_does_not_block_on_generation(tmp_path, monkeypatch):
     resp = client.get("/")
     elapsed = time.monotonic() - start
     assert resp.status_code == 200
-    # The page must return in well under the slow call's 0.5s — the page is
-    # not waiting on the background thread.
-    assert elapsed < 0.4
+    # The page must NOT wait on the background thread: it returns after the
+    # join(0.2) safety net, never after the full slow call. The call is 2s
+    # and the threshold 1s, so a regression that blocks on generation (>=2s)
+    # fails loudly while full-suite load spikes (observed ~0.5s) pass with
+    # margin — the old 0.5s-call/0.4s-threshold pair was a documented
+    # load flake (activeContext "Noticed", D-020 session).
+    assert elapsed < 1.0
     # With a slow provider, the background thread does not finish in time,
     # so no prompt is rendered on this load. The next load will pick it up.
     assert "Fresh connection" not in resp.text or "architecture" in resp.text

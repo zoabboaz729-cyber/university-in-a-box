@@ -279,5 +279,55 @@ recorded, and no doc contradicts the running app.
 
 ---
 
+## Stage 3 — Owner roadmap (post-Phase 11)
+
+**Goal:** Seven owner-requested improvements to navigation, the Advisor, and the Librarian,
+delivered together on top of the v0.6 commit. (Called "Stage 3" because it came from the owner's
+own roadmap rather than this document — the phase numbering above it is unchanged.)
+
+**Why:** P7 (agency — every course/group action reachable, including on a phone), P1
+(personalization — curriculum shape follows the learner's scope, not a fixed count), P2 (narrow
+the pile for real — a source is judged from what it actually says, not from its URL).
+
+**Steps (all seven implemented):**
+1. One ⋮ course menu: `templates/_course_menu.html` macro, used by the sidebar, the dashboard
+   rows, and the mobile dialog (instead of three near-duplicate menus).
+2. Mobile course navigation: `courses-nav-modal` dialog + `#mobile-courses-btn`, so courses and
+   their menus are reachable on a phone — the ≤760px media query previously hid the sidebar list
+   entirely, making the ⋮ menus unreachable there.
+3. Group discoverability: a `Groups` sidebar nav entry, a "New group" button on the dashboard, and
+   an empty-state link to `/groups` (group creation used to be reachable only after a course
+   existed).
+4. Adaptive topic count: `prompts/advisor.md` now asks for 4–8 topics (up to 12 for large scopes)
+   and the parser guard accepts 3–15, replacing the old fixed-count behavior.
+5. Group timeframe pre-fill (D-023): a `uniform` group's stated duration pre-fills the Advisor's
+   sequencing answer for courses created inside that group — pre-fill, not skip; only when the
+   step is still empty; free text only, no duration math.
+6. Outbound source reading (D-024): `app/fetching/` (SSRF-guarded HTTP, HTML/PDF text extraction,
+   YouTube transcripts), `sources.course_id` + `sources.verified_at` migrations, and course-level
+   sources (a source can attach to the whole Course, not just a Topic).
+7. Read-before-accept Librarian (D-024): `librarian.verify()` + `prompts/librarian_verify.md`;
+   exactly one of three explicit outcomes per attempt — verified-accept, verified-reject, or
+   unavailable (retry / keep permanently badged `unverified` / discard), at both topic and course
+   level, with a per-row Verify-now action for rows stored before verification existed.
+
+**Constraints specific to this stage:** one fetch + one LLM call per source attempt; no
+scheduling/week math anywhere; no sixth role; navigation work stays plain server-rendered HTML
+(no bundler, no new listener), and existing routes/URLs keep working.
+
+**Definition of Done:** the seven behaviors work end to end on a running app; `python -m pytest -q`
+is green; the owner has walked the new UI paths (⋮ menus on sidebar/dashboard/mobile,
+group-creation discoverability, adaptive topic counts on a real curriculum, group timeframe
+pre-fill, and the full Librarian read-before-accept flow at topic and course level) and the result
+is recorded in `memory-bank/progress.md`; the work is committed.
+
+**Status:** implemented and suite-verified (**215 passed, 2 warnings** — 2026-09-14, re-verified
+2026-09-16); **owner walkthrough and commit still outstanding** (see `memory-bank/activeContext.md`).
+
+---
+
 ## After Phase 11
-The product remains extensible. Future work (spaced-repetition on gap notes, export/print of a Course, exam simulation) should continue to be proposed as new phases appended here.
+
+The product remains extensible. Future work (multi-topic Roommate cross-linking depth,
+spaced-repetition on gap notes, export/print of a Course, exam simulation) should continue to be
+proposed as new phases appended here.

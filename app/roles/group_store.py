@@ -8,8 +8,12 @@ Group carries a timeframe mode:
   per-topic time_box pacing; no group-level schedule is implied.
 - 'uniform': the group declares ONE shared duration ("12 weeks",
   "Sept 1 - Dec 15") so the whole cohort runs on the same calendar. The
-  duration is displayed on group cards; no fabricated week-math is
-  invented from it (CONSTRAINTS: no slop).
+  duration is displayed on group cards AND — as of the Stage 3
+  pre-fill decision (D-023) — used as the Advisor's PRE-FILL text for
+  the sequencing step of courses created inside the group (the question
+  stays visible; the user edits or keeps it). Still no fabricated
+  week-math or scheduling arithmetic is derived from it (CONSTRAINTS:
+  no slop).
 
 All functions are thin, explicit SQL over app.db (P8). Deleting a Group
 follows D-022 Option B: the caller chooses 'ungroup' (courses keep every
@@ -139,6 +143,30 @@ def update_group(group_id: int, name: str | None = None,
              (new_duration or "").strip() or None, new_status, group_id),
         )
     return True
+
+
+def uniform_timeframe_of_course(course_id: int) -> tuple[str, str] | None:
+    """(group_name, timeframe_duration) when the course belongs to a group
+    that declares a uniform timeframe with a non-empty duration.
+
+    Returns None otherwise (ungrouped, 'individual' mode, or empty
+    duration). Used by the Advisor to PRE-FILL — never skip — the
+    sequencing step for courses created inside the group (D-023). The
+    duration is answer-shaped free text; no week-math is derived from it.
+    """
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT g.name, g.timeframe_duration FROM courses c "
+            "JOIN course_groups g ON g.id = c.group_id "
+            "WHERE c.id = ? AND g.timeframe_mode = 'uniform'",
+            (course_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    duration = (row["timeframe_duration"] or "").strip()
+    if not duration:
+        return None
+    return row["name"], duration
 
 
 def set_course_group(course_id: int, group_id: int | None) -> bool:

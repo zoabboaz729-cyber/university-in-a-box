@@ -21,7 +21,7 @@ from app.roles.course_manage import (
 )
 from app.roles.course_store import get_course
 from app.roles.review_store import has_editor_review, list_reviews_for_topic
-from app.roles.source_store import list_sources
+from app.roles.source_store import list_course_sources, list_sources
 from app.roles.tutor_store import find_open_session, list_sessions_for_topic
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -58,7 +58,8 @@ def course_view(request: Request, course_id: int):
         return _not_found(request, "Course not found. It may have been deleted.")
     return templates.TemplateResponse(
         request, "course.html",
-        {"course": course},
+        {"course": course, "sources": list_course_sources(course_id),
+         "error": ""},
     )
 
 

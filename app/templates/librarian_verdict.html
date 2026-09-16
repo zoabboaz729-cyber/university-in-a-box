@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Source rejected — University in a Box{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>The Librarian read it and said no</h1>
+</div>
+
+<div class="callout callout-warning">
+  <p style="margin:0"><strong>{{ message }}</strong></p>
+</div>
+
+{% if removed %}
+<p class="subtitle">
+  The source you had kept before is now removed — a re-read said no, so it is
+  no longer in your list.
+</p>
+{% else %}
+<p class="subtitle">
+  Nothing was stored. This is the Librarian's judgment, not a ruling: if you
+  disagree, add the source again and it will be read again.
+</p>
+{% endif %}
+
+<p style="margin-top:1.25rem">
+  <a class="btn btn-secondary btn-sm" href="{{ next }}">Back</a>
+</p>
+{% endblock %}

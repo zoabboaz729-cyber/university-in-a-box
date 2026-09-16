@@ -369,14 +369,16 @@ def test_dashboard_group_filter(tmp_path, monkeypatch):
     # Filter to the group: only its courses appear in the MAIN list (the
     # sidebar always lists every course, the filter narrows the list only).
     g_resp = client.get(f"/?group={g_id}")
-    main_g = g_resp.text.split("<main>", 1)[1]
+    # Slice only the <main> content: document-level modals after it (the
+    # mobile nav dialog) legitimately list every course, like the sidebar.
+    main_g = g_resp.text.split("<main>", 1)[1].split("</main>", 1)[0]
     assert f'href="/courses/{a_id}"' in main_g
     assert f'href="/courses/{b_id}"' in main_g
     assert f'href="/courses/{u_id}"' not in main_g
 
     # Filter to ungrouped: only the lone course appears in the main list.
     n_resp = client.get("/?group=none")
-    main_n = n_resp.text.split("<main>", 1)[1]
+    main_n = n_resp.text.split("<main>", 1)[1].split("</main>", 1)[0]
     assert f'href="/courses/{u_id}"' in main_n
     assert f'href="/courses/{a_id}"' not in main_n
 
@@ -401,6 +403,34 @@ def test_dashboard_renders_group_menus_and_modals(tmp_path, monkeypatch):
     assert "Group / Semester" in resp.text  # new context-menu action
     assert "group-assign-modal" in resp.text
     assert "openGroupModal" in resp.text
+
+
+def test_mobile_courses_nav_dialog_renders(tmp_path, monkeypatch):
+    """Task 2: phones reach every course/group through the nav dialog."""
+    client = make_client(tmp_path, monkeypatch)
+    g_id, a_id, b_id = _seed_grouped(tmp_path, monkeypatch)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert 'id="mobile-courses-btn"' in resp.text
+    assert "courses-nav-modal" in resp.text
+    # Every grouped course is listed inside the dialog with its own
+    # mnav-menu- id (unique next to sb-menu- and dash-menu-).
+    assert f"mnav-menu-{a_id}" in resp.text
+    assert f"mnav-menu-{b_id}" in resp.text
+    assert "Semester 1" in resp.text
+    assert f'href="/courses/{a_id}"' in resp.text
+
+
+def test_group_creation_discoverable_on_dashboard(tmp_path, monkeypatch):
+    """Task 3: a fresh, course-less, group-less account can reach the
+    group-creation form in one click via visible affordances (nav item,
+    dashboard button, empty-state link)."""
+    client = make_client(tmp_path, monkeypatch)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert 'href="/groups"' in resp.text  # persistent sidebar nav item
+    assert "New group" in resp.text       # dashboard secondary button
+    assert resp.text.count('href="/groups"') >= 2
 
 
 def test_journal_shows_intra_group_bridge(tmp_path, monkeypatch):

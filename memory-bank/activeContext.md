@@ -4,6 +4,43 @@
 any coding-agent session should read — it should be enough, on its own, to know exactly
 where the project stands and what to do next.**
 
+**2026-09-16 (Stage 3 close-out prep session): VERIFIED — `python -m pytest -q` → 215 passed, 2 warnings in 26.51s at the start of the session, and again on the final working tree after every edit below: 215 passed, 2 warnings in 24.93s.** Detached-run note: `Start-Job` dies when the terminal is reused (it stalled at 66%); `Start-Process … -RedirectStandardOutput <file>` is the reliable pattern here — the output FILE is the source of truth, never the terminal pane. **No product behavior changed** (the only `.py` edits were two doc-comment citations). What this session did:
+1. **Added the missing D-024** to `memory-bank/decisions.md` — the Librarian read-before-accept decision (fetch reversal, three explicit outcomes, `unverified` verdict, topic-or-course source scope, "routes own the fetch / roles own the judgment"). Both `roles/librarian.py` and `routes/librarian.py` had *claimed* the reversal was recorded; it was not (the route comment cited a non-existent D-013). `D-011` now carries a "Superseded for the live add-a-source path" note.
+2. **Docs reconciled with the running code** (docs/04 §7 obligation, docs/05 "no doc contradicts the app"): `docs/02-ARCHITECTURE.md` — data model gains `CourseGroup` / `courses.group_id` / `sources.course_id`+`verified_at`+`unverified` / `roommate_prompts.field`+`secondary_course_id`+`connection_type` / `_dash_visits`, a new "Outbound fetching pattern (D-024)" section, the real folder layout (`app/fetching/`, groups, `_`-prefixed partials), and the `/tasks/due` claim replaced with the actual in-process dashboard-load due-check; `docs/03-BUILD-PLAN.md` — new **Stage 3** section (the plan previously jumped from Phase 11 straight to "After Phase 11" while progress.md listed a Stage 3 row); `docs/04-CONSTRAINTS.md` §5 — outbound-fetch rule; `docs/07-FRONTEND-AUDIT.md` — dated amendment on its now-stale HTMX + `/tasks/due` findings (stale since Phase 9 self-hosted `htmx.min.js`; templates use `hx-include`/`hx-indicator`, still no `hx-get/post/target/swap`).
+3. **Scratch cleanup:** 13 `_audit_*.txt` files + the NUL-filled `_audit_live_check.py` deleted from the repo root; 28 `data/pytest_*.txt` test-output files deleted (data/ now holds only `.gitkeep`, `app.log`, `university.db`). `.gitignore` now also covers `mystartingcommand.md` (owner scratch note, kept on disk).
+4. **Boot smoke test on the REAL database** (temporary `_smoke.ps1`, deleted afterwards — uvicorn on port 8123, deliberately NOT requesting `/` so the Roommate due-check could not make a real LLM call or write a prompt row into the owner's data): `GET /advisor/new`, `/settings`, `/groups`, `/courses/4`, `/topics/22` → **all 200** (real ids read from `data/university.db`; 7 courses, topics 22–55); `/topics/1` and an unknown path → clean 404; uvicorn log shows "Application startup complete" with no errors. So the working tree boots, migrates the real DB on boot, and renders the new pages against real data.
+**2026-09-14 (Stage 3 verification session): VERIFIED — `python -m pytest -q` → 215 passed, 2 warnings in 25.56s** (foreground shell output is unobservable in this environment, so the suite ran detached via a temp runner with output to a temp file; both scratch files removed afterwards). All 7 owner-roadmap tasks green, zero regressions. No product code changed this session — only scratch cleanup + this memory-bank update. Remaining before Stage 3 is Done: owner UI walkthrough + commit (see Next step).
+
+**2026-09-14 (Stage 2 confirmation pass, same investigation): READ-ONLY — no product code
+changed.** Owner's five feature decisions re-examined against exact code traces. Key
+findings: (1) owner's belief CONFIRMED — the ONLY `course_groups` INSERT is
+`group_store.create_group` (group_store.py:39), only called by `POST /groups/create`
+(routes/groups.py:61), whose only form is groups.html:20, and the only `<a href="/groups">`
+anywhere is inside the group-assign modal hint (base.html:189) — reachable only after a
+course exists; `/groups` is not in the persistent nav. (2) Item 4 note: if all 5 answers are
+pre-seeded, `next_step()` (advisor.py:64) would jump straight to /review — a
+"confirmed vs draft answer" marker is required; `advisor.py:7` "LLM used exactly once" and
+the STEPS docstring must be revised. (3) `requirements.txt` already has `httpx` (line 4);
+only new dep proposed for source verification is `youtube-transcript-api`; mobile fix
+precedent: `{% macro course_row %}` (index.html:50) is the codebase's existing
+component pattern for the ⋮ consolidation. Verdicts + build order delivered in-session.
+**2026-09-14 (Feature-roadmap investigation session): READ-ONLY — no product code changed.**
+The owner commissioned an investigation for 5 candidate features: (1) groups + property
+inheritance, (2) mobile course-card menus, (3) adaptive topic count/durations, (4) chat
+onboarding for the Advisor, (5) source recommendation + verification engine. Findings that
+reshape those features: **(1) Groups are ALREADY fully built** (Phase 11 — course_groups
+table, group_store.py, routes/groups.py, sidebar folders, dashboard filters, ⋮ menu modal);
+"inheritance" beyond the display-only `timeframe_mode`/'uniform' duration would be new.
+**(2) 3-dots menus exist** (Phase 10) but the single 760px media query hides the whole
+sidebar course list on mobile (`style.css:1214`), so menus are unreachable on phones.
+**(3) "Always 6 topics" does NOT exist in this codebase** — `prompts/advisor.md:11` says
+"4–8 topics"; per-topic `time_box` already varies (free TEXT, never parsed for math).
+**(4) Advisor is a fixed 5-question form flow** (advisor.py STEPS/STEP_QUESTIONS) — the
+fixed-question design is a documented deliberate choice; chat onboarding contradicts it and
+needs a product decision. **(5) No web-fetching/YouTube capability exists anywhere**;
+`roles/librarian.py:7-9` explicitly states the model never fetches URLs. Full report was
+delivered in-session (chat); its content is reproduced in this session's conversation only.
+
 ## Current state
 **2026-09-13 (Phase 11 Course Groups / Semesters session): COMPLETED & VERIFIED.**
 Full suite: **160 passed, 2 warnings in 22.66s** (21 new tests in
@@ -104,23 +141,29 @@ uniform display), sidebar group folders + dashboard filters, and
 intra-group Roommate synthesis — all implemented and backed by tests
 (160 passed; see progress.md Phase 11 row for the component map).
 
+**Stage 3 (owner roadmap, 7 tasks) is implemented, suite-verified and documented; the only
+things left are the owner's UI walkthrough and the commit — see Next step.**
+
 ## Next step
-No build-plan phase remains. Recommended next actions, in order:
-1. **Owner manual walkthrough of the Groups UI** (same as the Phase 8
-   ritual): create a group, file courses from the 3-dots menu, toggle
-   timeframe mode, delete a group both ways, and check the sidebar/dashboard
-   render — then record the result in progress.md's walkthrough section.
-2. **Commit Phase 10 + Phase 11** (both are uncommitted on top of
-   "v0.5: The initial application"; `git status` currently shows the
-   modified core files + new `group_store.py`, `groups.py`, `groups.html`,
-   `roommate_intra.md`, `tests/test_groups.py`, `tests/test_course_delete.py`).
+Stage 3 (owner roadmap, 7 tasks) is implemented, suite-verified (215 passed — 2026-09-14, re-verified 2026-09-16) and its docs are now reconciled (docs/02, the new docs/03 Stage 3 section, docs/04, D-024 — see the 2026-09-16 entry at the top of this file). Remaining, in order:
+1. **Owner manual walkthrough of the Stage 3 UI** (same as the Phase 8
+   ritual): ⋮ menus on sidebar/dashboard/mobile dialog, group-creation
+   discoverability, adaptive topic counts on a real curriculum, group
+   timeframe pre-fill, and the full Librarian read-before-accept flow
+   (accept / reject / retry-keep-discard) at topic and course level —
+   then record the result in progress.md's walkthrough section.
+2. **Commit Stage 3** on top of v0.6 (working tree: modified core files +
+   new `app/fetching/`, `librarian_verify.md`, `_course_menu.html`,
+   `_sources.html`, `librarian_*.html`, `tests/test_fetching.py`; still
+   untracked and uncommitted: `docs/07-FRONTEND-AUDIT.md` and the
+   extension-less `docs/Frontend-Mockup` HTML mockup).
+   Git identity IS configured repo-locally (Zoab Boaz
+   <309829610+zoabboaz729-cyber@users.noreply.github.com>), so the agent can
+   make this commit as soon as the owner says go.
 3. Propose the next phase by appending to `docs/03-BUILD-PLAN.md`
    ("After Phase 11" section): candidates already on file — multi-topic
    Roommate cross-linking depth, spaced repetition on gap notes,
    export/print of a Course, exam simulation.
-
-8" (e.g. multi-topic Roommate cross-linking, spaced repetition on gap notes,
-export/print of a Course).
 
 <!-- Historical: Phase 7 completion pass (D-018) sub-steps: error logging via
 app/monitor.py; Settings persistence to .env; NEW_COURSES_START_PAUSED
@@ -129,6 +172,15 @@ tests/test_regression_loop.py covers docs/05 items 1-7. -->
 
 
 ## Noticed
+- RESOLVED (2026-09-16, owner option (a), D-025 — deletion implemented same day):
+  the old `librarian.triage()` + `prompts/librarian.md` path was DELETED —
+  `triage()`, `_parse_verdict()`,
+  `SourceVerdict`, `PROMPT_FILE`, the `.md` file, and the 3 triage tests are gone.
+  `VERDICTS` moved to its live consumer `app/roles/source_store.py` (stored-row
+  validation only, since legacy rows still carry keep/skip/later and the Shelf
+  filter is verdict = 'keep'). Full suite after deletion: **212 passed,
+  2 warnings** (215 minus the 3 removed triage tests).
+- RESOLVED (2026-09-16, owner decision): `docs/Frontend-Mockup` is a single extension-less HTML file (12,493 bytes, the Direction A mockup), not a directory. **Owner chose: leave it exactly where it is** — do not rename or move it; it gets committed as-is with Stage 3.
 - NEW (D-020 session): `test_roommate_routes.py::test_dashboard_does_not_block_on_generation`
   is a load flake — it asserts the dashboard renders in < 0.4s while the slow
   provider call takes 0.5s; under full-suite load it measured 0.4067s and
@@ -154,4 +206,5 @@ tests/test_regression_loop.py covers docs/05 items 1-7. -->
   does). Full suite completes in ~13s when run this way.
 
 ## Open questions
-- (none)
+- (none — the triage() question is resolved as D-025; the Frontend-Mockup
+  question is resolved: leave the file exactly where it is.)

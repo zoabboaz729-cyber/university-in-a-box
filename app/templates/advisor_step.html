@@ -20,6 +20,17 @@
   <h1 style="font-size:1.45rem;margin-top:0.6rem;line-height:1.35">{{ question | safe }}</h1>
 </div>
 
+{% if step == "sequencing" %}
+<p style="font-size:.82rem;color:var(--ink-soft);margin:.4rem 0 0">
+  This answer drives the plan: how much time you state decides how many
+  topics the Advisor creates, and each topic gets its own time estimate.
+</p>
+{% endif %}
+
+{% if prefill_hint %}
+<div class="callout callout-info">{{ prefill_hint }}</div>
+{% endif %}
+
 {% if error %}
 <div class="callout callout-error">{{ error }}</div>
 {% endif %}

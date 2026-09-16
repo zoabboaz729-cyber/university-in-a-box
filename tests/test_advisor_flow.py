@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.db import get_db_path, init_db
 from app.main import api
-from app.roles import advisor
+from app.roles import advisor, group_store
 
 ANSWERS = {
     "destination": "reach conversational level",
@@ -25,7 +25,11 @@ ANSWERS = {
 GOOD_DRAFT = (
     '{"course_title": "Test Course", "topics": ['
     '{"title": "T1", "milestone_description": "Write a one-page summary.", '
-    '"time_box": "1 week"}]}'
+    '"time_box": "1 week"}, '
+    '{"title": "T2", "milestone_description": "Solve five practice problems.", '
+    '"time_box": "1 week"}, '
+    '{"title": "T3", "milestone_description": "Explain it aloud.", '
+    '"time_box": "2 weeks"}]}'
 )
 
 
@@ -133,3 +137,86 @@ def test_resume_after_restart_lands_on_next_step(monkeypatch, tmp_path):
     page = client.get(f"/advisor/{interview_id}")
     assert advisor.question_for("baseline") in page.text
     assert "Step 2 of 5" in page.text
+
+
+# --- Task 5 (D-023): group timeframe pre-fills the sequencing step -------
+
+def _make_uniform_group(duration="12 weeks"):
+    return group_store.create_group(
+        "Semester 1", timeframe_mode="uniform", timeframe_duration=duration)
+
+
+def _answer_to_sequencing(client):
+    """Answer destination + baseline so GET /advisor/1 renders sequencing."""
+    client.post("/advisor/1", data={"step": "destination", "answer": "d"})
+    client.post("/advisor/1", data={"step": "baseline", "answer": "b"})
+
+
+def test_group_timeframe_prefills_sequencing_with_hint(monkeypatch, tmp_path):
+    """A course created inside a uniform '12 weeks' group shows '12 weeks'
+    pre-filled in the sequencing step, with the visible hint."""
+    client = make_client(tmp_path, monkeypatch)
+    _make_uniform_group()
+    # The create form offers the group select.
+    assert "Create inside a group" in client.get("/advisor/new").text
+    client.post("/advisor/new", data={"topic": "Spanish", "group_id": "1"})
+    _answer_to_sequencing(client)
+    page = client.get("/advisor/1")
+    assert advisor.question_for("sequencing") in page.text
+    assert "12 weeks" in page.text
+    # The hint renders with a HTML-escaped apostrophe (Semester 1&#39;s).
+    assert "Pre-filled from Semester 1" in page.text
+    assert "timeframe" in page.text
+    assert "edit as needed" in page.text
+
+
+def test_edited_prefill_persists_via_save_answer(monkeypatch, tmp_path):
+    """Editing the pre-filled sequencing answer before submitting persists
+    the EDITED value (the pre-fill flows through the existing save_answer)."""
+    client = make_client(tmp_path, monkeypatch)
+    _make_uniform_group()
+    client.post("/advisor/new", data={"topic": "Spanish", "group_id": "1"})
+    _answer_to_sequencing(client)
+    client.post(
+        "/advisor/1",
+        data={"step": "sequencing", "answer": "12 weeks but only 3 h/week"},
+    )
+    with sqlite3.connect(get_db_path()) as conn:
+        row = conn.execute(
+            "SELECT answer FROM advisor_interviews "
+            "WHERE course_id = 1 AND step = 'sequencing'").fetchone()
+    assert row[0] == "12 weeks but only 3 h/week"
+
+
+def test_answered_step_shows_user_answer_not_group_default(monkeypatch, tmp_path):
+    """Re-entering an already-answered sequencing step shows the user's own
+    answer — the group default never overwrites it."""
+    client = make_client(tmp_path, monkeypatch)
+    _make_uniform_group()
+    client.post("/advisor/new", data={"topic": "Spanish", "group_id": "1"})
+    _answer_to_sequencing(client)
+    client.post("/advisor/1", data={"step": "sequencing", "answer": "my own pacing"})
+    page = client.get("/advisor/1/edit/sequencing")
+    assert "my own pacing" in page.text
+    assert "Pre-filled from" not in page.text
+
+
+def test_standalone_creation_unchanged(monkeypatch, tmp_path):
+    """With no group chosen, the sequencing step is empty — no pre-fill,
+    no hint. Group assignment of the draft stays unset."""
+    client = make_client(tmp_path, monkeypatch)
+    _make_uniform_group()
+    client.post("/advisor/new", data={"topic": "Spanish"})  # no group_id
+    _answer_to_sequencing(client)
+    page = client.get("/advisor/1")
+    assert advisor.question_for("sequencing") in page.text
+    assert "Pre-filled from" not in page.text
+    assert group_store.get_group(1)["course_count"] == 0
+
+
+def test_no_groups_means_no_group_select(monkeypatch, tmp_path):
+    """Accounts with no groups see no 'Create inside a group' select at all."""
+    client = make_client(tmp_path, monkeypatch)
+    page = client.get("/advisor/new")
+    assert page.status_code == 200
+    assert "Create inside a group" not in page.text

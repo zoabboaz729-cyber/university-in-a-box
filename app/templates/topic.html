@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_sources.html" as src %}
 {% block title %}{{ topic.title }} — {{ topic.course_title }}{% endblock %}
 
 {% block content %}
@@ -51,41 +52,16 @@
   </div>
 
   {% if not shelf_only %}
-  <div class="card" style="margin-bottom:1rem">
-    <h3 style="font-size:.9rem;margin-bottom:.8rem">Add a source</h3>
-    <form method="post" action="/topics/{{ topic.id }}/sources">
-      <div class="form-group">
-        <label for="src-label">Label</label>
-        <input id="src-label" name="label" type="text" required placeholder="e.g. Chapter 3 of Thinking, Fast and Slow">
-      </div>
-      <div class="form-group">
-        <label for="src-ref">URL or reference (optional)</label>
-        <input id="src-ref" name="reference" type="text" placeholder="https://…">
-      </div>
-      <button class="btn btn-primary btn-sm" type="submit">Add source</button>
-    </form>
-  </div>
+  {{ src.add_form("topic", topic.id, "/topics/" ~ topic.id) }}
   {% endif %}
 
   {% if sources %}
-  <div class="source-list">
-    {% for source in sources %}
-    <div class="source-item{% if source.verdict == 'skip' %} skipped{% endif %}">
-      <div>
-        <p class="source-label">{{ source.label }}</p>
-        <p class="source-reason">{{ source.reason }}</p>
-        {% if source.url_or_reference %}
-        <p class="source-ref">{{ source.url_or_reference }}</p>
-        {% endif %}
-      </div>
-      <span class="pill {{ source.verdict }}">{{ source.verdict | title }}</span>
-    </div>
-    {% endfor %}
-  </div>
+  {{ src.rows("topic", topic.id, sources, "/topics/" ~ topic.id) }}
   {% else %}
   <p style="color:var(--ink-soft);font-size:.88rem">
     {% if shelf_only %}No sources marked keep yet.
-    {% else %}No sources yet. Add the first one above — each gets a keep/skip/later verdict with a one-line reason.{% endif %}
+    {% else %}No sources yet. Add the first one above — it gets read, judged
+    for fit and credibility, and marked keep/skip/later.{% endif %}
   </p>
   {% endif %}
 </div>

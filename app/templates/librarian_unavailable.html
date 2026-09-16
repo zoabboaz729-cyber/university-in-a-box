@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Couldn't read that source — University in a Box{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Couldn't read that source</h1>
+  <p class="subtitle">{{ label }}{% if reference %} · {{ reference }}{% endif %}</p>
+</div>
+
+<div class="callout callout-warning">
+  <p style="margin:0">{{ message }}</p>
+</div>
+
+<p class="subtitle" style="margin-top:1rem">
+  Nothing was stored as verified. A source the app physically cannot read is
+  your call — it is never guessed at:
+</p>
+
+<form method="post"
+      action="{% if source_id %}/{{ scope }}s/{{ scope_id }}/sources/{{ source_id }}/verify{% else %}/{{ scope }}s/{{ scope_id }}/sources{% endif %}"
+      onsubmit="return showVerifying(this)">
+  <input type="hidden" name="label" value="{{ label }}">
+  <input type="hidden" name="reference" value="{{ reference }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="source-actions">
+    <button class="btn btn-primary btn-sm" type="submit" name="decision" value="">
+      Retry now
+    </button>
+    <button class="btn btn-secondary btn-sm" type="submit" name="decision"
+            value="keep_unverified">
+      Keep as unverified
+    </button>
+    <button class="btn btn-outline-danger btn-sm" type="submit" name="decision"
+            value="discard">
+      Discard
+    </button>
+  </div>
+  <p class="verifying-note" style="display:none">Trying to read it again…</p>
+</form>
+
+<p style="margin-top:1.25rem">
+  <a class="btn btn-secondary btn-sm" href="{{ next }}">Back</a>
+</p>
+{% endblock %}

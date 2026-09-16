@@ -1,0 +1,49 @@
+{# Single source of truth for the ⋮ course context menu (Task 1 consolidation).
+
+   Usage: {{ course_menu(course, id_prefix) }}
+   - course: a dashboard-shaped course dict (id, title, group_id)
+   - id_prefix: unique DOM id prefix per call site, e.g. 'sb-menu-'
+     (sidebar), 'dash-menu-' (dashboard), 'mnav-menu-' (mobile nav dialog).
+   The dropdown ids must stay unique per prefix — the JS in base.html
+   toggles them by exact id. #}
+{% macro course_menu(c, id_prefix) %}
+<div class="course-menu-wrap">
+  <button type="button" class="course-menu-btn" aria-label="Options for {{ c.title }}" title="Course options"
+          onclick="toggleCourseMenu(event, '{{ id_prefix }}{{ c.id }}')">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+      <circle cx="8" cy="3" r="1.5"/>
+      <circle cx="8" cy="8" r="1.5"/>
+      <circle cx="8" cy="13" r="1.5"/>
+    </svg>
+  </button>
+  <div id="{{ id_prefix }}{{ c.id }}" class="course-menu-dropdown" style="display:none;">
+    <a href="/courses/{{ c.id }}" class="course-menu-item">
+      <span>↗ Open course</span>
+    </a>
+    <button type="button" class="course-menu-item"
+            onclick="closeAllCourseMenus(); openGroupModal('{{ c.id }}', '{{ c.title | escape }}', window.location.pathname, {{ c.group_id if c.group_id is not none else 'null' }})">
+      <span>📁 Group / Semester…</span>
+    </button>
+    <button type="button" class="course-menu-item course-menu-item-danger"
+            onclick="closeAllCourseMenus(); openDeleteModal('{{ c.id }}', '{{ c.title | escape }}')">
+      <span>🗑 Delete course</span>
+    </button>
+  </div>
+</div>
+{% endmacro %}
+
+{# One course row as it appears in the sidebar / mobile nav dialog: the
+   link + meta plus that course's ⋮ menu (via course_menu above). Used
+   wherever the sidebar_groups() shape is rendered as a flat row. #}
+{% macro nav_course_row(c, id_prefix) %}
+<div class="sidebar-course-item">
+  <a class="sidebar-course" href="/courses/{{ c.id }}">
+    <span class="sidebar-course-title">{{ c.title }}</span>
+    <span class="sidebar-course-meta">
+      <span class="status-dot {{ c.status }}"></span>
+      {{ c.done_topics }} / {{ c.total_topics }} topics
+    </span>
+  </a>
+  {{ course_menu(c, id_prefix) }}
+</div>
+{% endmacro %}

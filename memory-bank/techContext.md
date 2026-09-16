@@ -25,9 +25,16 @@ uvicorn app.main:app --reload
 
 - `requirements.txt`: fastapi>=0.110, uvicorn[standard]>=0.29, jinja2>=3.1,
   httpx>=0.27, pytest>=8.0, python-multipart>=0.0.18 (form parsing for the
-  interview POSTs; added Phase 1b). Verified installed: pytest 9.1.1 (plus current
+  interview POSTs; added Phase 1b), youtube-transcript-api>=1.0 + pypdf>=4.0
+  (Stage 3 source fetching: YouTube transcripts + PDF text extraction).
+  Verified installed: pytest 9.1.1 (plus current
   fastapi/starlette/jinja2/httpx from pip cache) on Python 3.14, 2026-09-09.
 - No python-dotenv: `app/ai/config.py` parses `.env` with the stdlib only.
+- Outbound fetching lives in `app/fetching/` (http + extract + youtube) with
+  SSRF guards; routes own the fetch, roles own the judgment (D-024).
+- `pypdf` and `youtube-transcript-api` are installed in `.venv` and were
+  import-exercised by the full suite on 2026-09-16 (215 passed) — a missing
+  one would fail collection, not just a fetch test.
 
 ## Known constraints
 - Coding done via Cline with free-tier models (GLM-Flash-5.3, DeepSeek V4) — see
