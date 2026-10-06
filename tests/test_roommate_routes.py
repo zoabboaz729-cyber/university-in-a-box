@@ -257,8 +257,8 @@ def test_durable_badge_store_behavior(tmp_path, monkeypatch):
     older = datetime.now(timezone.utc) - timedelta(minutes=5)
     older_str = older.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     save_prompt(course_id, "architecture", "old", created_at=older_str)
-    record_dash_visit()  # simulate a previous dashboard load
-    baseline = dash_visit_at()
+    record_dash_visit(1)  # simulate a previous dashboard load
+    baseline = dash_visit_at(1)
     # Now a newer prompt exists after the visit → store says "new".
     newer = datetime.now(timezone.utc)
     newer_str = newer.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -282,8 +282,8 @@ def test_no_badge_when_nothing_new(tmp_path, monkeypatch):
     # has nothing new to generate (cadence suppresses it).
     client, provider = make_client(tmp_path, monkeypatch)
     client.get("/")  # baseline visit + first prompt
-    record_dash_visit()
-    baseline = dash_visit_at()
+    record_dash_visit(1)
+    baseline = dash_visit_at(1)
     # No prompt newer than the visit → store says "not new".
     assert prompt_newer_than(baseline) is None
     provider.calls = 0

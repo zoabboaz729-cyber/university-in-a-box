@@ -14,7 +14,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.ai.provider import ProviderError  # noqa: F401 (re-exported for callers)
+from app.ai.provider import ProviderError, call_provider_async  # noqa: F401 (re-exported for callers)
 
 PARSE_ERRORS = (ValueError, KeyError, TypeError, json.JSONDecodeError)
 
@@ -87,4 +87,26 @@ def review_submission(topic_title: str, milestone: str, submitted_text: str,
         # Bad JSON from the model — retry the LLM once with the same
         # prompt, then let the error surface clearly.
         raw = provider.generate(system_prompt, user_message)
+        return _parse_review(raw)
+
+
+async def review_submission_async(topic_title: str, milestone: str,
+                                submitted_text: str, provider) -> Review:
+    """Async review flow for the non-blocking Editor route."""
+    system_prompt = PROMPT_FILE.read_text(encoding="utf-8")
+    user_message = "\n".join([
+        "Topic the user is studying: " + topic_title,
+        "Topic milestone (the bar this work is judged against): "
+        + (milestone or ""),
+        "The user submitted this work for review:",
+        "---",
+        submitted_text,
+        "---",
+        "Review it now.",
+    ])
+    raw = await call_provider_async(provider, system_prompt, user_message)
+    try:
+        return _parse_review(raw)
+    except PARSE_ERRORS:
+        raw = await call_provider_async(provider, system_prompt, user_message)
         return _parse_review(raw)

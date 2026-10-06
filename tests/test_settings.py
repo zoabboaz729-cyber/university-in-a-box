@@ -55,6 +55,7 @@ def _confirm(course_id: int, title="Real Title"):
         course_id, title,
         [{"title": "T1", "milestone_description": "M1", "time_box": "1 week"}],
         {"destination": "d", "baseline": "b", "cut_list": "c"},
+        1,
     )
 
 

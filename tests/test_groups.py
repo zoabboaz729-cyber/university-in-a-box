@@ -44,9 +44,9 @@ def _seed_grouped(tmp_path, monkeypatch, group_name="Semester 1"):
     _init(tmp_path, monkeypatch)
     a_id, _ = seed_course("Course A", topics=[("TA", "not_started")])
     b_id, _ = seed_course("Course B", topics=[("TB", "not_started")])
-    group_id = group_store.create_group(group_name)
-    group_store.set_course_group(a_id, group_id)
-    group_store.set_course_group(b_id, group_id)
+    group_id = group_store.create_group(1, group_name)
+    group_store.set_course_group(a_id, group_id, 1)
+    group_store.set_course_group(b_id, group_id, 1)
     return group_id, a_id, b_id
 
 
@@ -83,8 +83,8 @@ def test_schema_has_group_tables_and_columns(tmp_path, monkeypatch):
 
 def test_create_group_defaults_and_progress(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
-    group_id = group_store.create_group("Semester 1")
-    group = group_store.get_group(group_id)
+    group_id = group_store.create_group(1, "Semester 1")
+    group = group_store.get_group(group_id, 1)
     assert group["name"] == "Semester 1"
     assert group["timeframe_mode"] == "individual"  # D-022 Option A default
     assert group["description"] is None
@@ -93,8 +93,8 @@ def test_create_group_defaults_and_progress(tmp_path, monkeypatch):
     assert group["total_topics"] == 0
 
     cid, _ = seed_course("OS", topics=[("T1", "done"), ("T2", "not_started")])
-    group_store.set_course_group(cid, group_id)
-    group = group_store.get_group(group_id)
+    group_store.set_course_group(cid, group_id, 1)
+    group = group_store.get_group(group_id, 1)
     assert group["course_count"] == 1
     assert group["total_topics"] == 2
     assert group["done_topics"] == 1
@@ -104,43 +104,43 @@ def test_create_group_defaults_and_progress(tmp_path, monkeypatch):
 def test_create_group_validation(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
     with pytest.raises(ValueError):
-        group_store.create_group("   ")
+        group_store.create_group(1, "   ")
     with pytest.raises(ValueError):
-        group_store.create_group("G", timeframe_mode="weekly")
+        group_store.create_group(1, "G", timeframe_mode="weekly")
 
 
 def test_update_group(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
-    group_id = group_store.create_group("Semester 1")
+    group_id = group_store.create_group(1, "Semester 1")
     ok = group_store.update_group(
-        group_id, name="Semester 1: Systems",
+        1, group_id, name="Semester 1: Systems",
         timeframe_mode="uniform", timeframe_duration="12 weeks",
         status="completed")
     assert ok is True
-    group = group_store.get_group(group_id)
+    group = group_store.get_group(group_id, 1)
     assert group["name"] == "Semester 1: Systems"
     assert group["timeframe_mode"] == "uniform"
     assert group["timeframe_duration"] == "12 weeks"
     assert group["status"] == "completed"
-    assert group_store.update_group(99999, name="X") is False
+    assert group_store.update_group(1, 99999, name="X") is False
     with pytest.raises(ValueError):
-        group_store.update_group(group_id, timeframe_mode="bogus")
+        group_store.update_group(1, group_id, timeframe_mode="bogus")
 
 
 def test_assign_and_ungroup_course(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
     cid, _ = seed_course("Course", topics=[("T", "not_started")])
-    group_id = group_store.create_group("G")
-    assert group_store.set_course_group(cid, group_id) is True
-    assert [c["id"] for c in group_store.courses_in_group(group_id)] == [cid]
-    assert group_store.list_ungrouped_courses() == []
+    group_id = group_store.create_group(1, "G")
+    assert group_store.set_course_group(cid, group_id, 1) is True
+    assert [c["id"] for c in group_store.courses_in_group(group_id, 1)] == [cid]
+    assert group_store.list_ungrouped_courses(1) == []
     # Ungroup
-    assert group_store.set_course_group(cid, None) is True
-    assert group_store.courses_in_group(group_id) == []
-    assert [c["id"] for c in group_store.list_ungrouped_courses()] == [cid]
+    assert group_store.set_course_group(cid, None, 1) is True
+    assert group_store.courses_in_group(group_id, 1) == []
+    assert [c["id"] for c in group_store.list_ungrouped_courses(1)] == [cid]
     # Validation
-    assert group_store.set_course_group(cid, 99999) is False
-    assert group_store.set_course_group(99999, group_id) is False
+    assert group_store.set_course_group(cid, 99999, 1) is False
+    assert group_store.set_course_group(99999, group_id, 1) is False
 
 
 # --- group deletion (Option B, D-022) ----------------------------------
@@ -149,9 +149,9 @@ def test_assign_and_ungroup_course(tmp_path, monkeypatch):
 def test_delete_group_ungroup_preserves_courses(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
     group_id, a_id, b_id = _seed_grouped(tmp_path, monkeypatch)
-    affected = group_store.delete_group(group_id, "ungroup")
+    affected = group_store.delete_group(group_id, "ungroup", 1)
     assert affected == 2
-    assert group_store.get_group(group_id) is None
+    assert group_store.get_group(group_id, 1) is None
     with sqlite3.connect(get_db_path()) as conn:
         rows = conn.execute(
             "SELECT COUNT(*) FROM courses WHERE group_id = ?", (group_id,)
@@ -166,10 +166,10 @@ def test_delete_group_ungroup_preserves_courses(tmp_path, monkeypatch):
 def test_delete_group_with_courses_cascades(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
     group_id, a_id, _ = _seed_grouped(tmp_path, monkeypatch)
-    save_prompt(a_id, "architecture", "Prompt for A")
-    affected = group_store.delete_group(group_id, "delete_courses")
+    save_prompt(a_id, "architecture", "Prompt for A", 1)
+    affected = group_store.delete_group(group_id, "delete_courses", 1)
     assert affected == 2
-    assert group_store.get_group(group_id) is None
+    assert group_store.get_group(group_id, 1) is None
     with sqlite3.connect(get_db_path()) as conn:
         courses = conn.execute(
             "SELECT COUNT(*) FROM courses WHERE id IN (?, ?)",
@@ -182,11 +182,11 @@ def test_delete_group_with_courses_cascades(tmp_path, monkeypatch):
 
 def test_delete_group_validation(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
-    group_id = group_store.create_group("G")
+    group_id = group_store.create_group(1, "G")
     with pytest.raises(ValueError):
-        group_store.delete_group(group_id, "explode")
+        group_store.delete_group(group_id, "explode", 1)
     with pytest.raises(ValueError):
-        group_store.delete_group(99999, "ungroup")
+        group_store.delete_group(99999, "ungroup", 1)
 
 
 # --- sidebar structure --------------------------------------------------
@@ -194,14 +194,14 @@ def test_delete_group_validation(tmp_path, monkeypatch):
 
 def test_sidebar_groups_structure(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
-    g1 = group_store.create_group("Semester 1")
-    g2 = group_store.create_group("Semester 2")
+    g1 = group_store.create_group(1, "Semester 1")
+    g2 = group_store.create_group(1, "Semester 2")
     c1, _ = seed_course("OS", topics=[("T", "not_started")])
     c2, _ = seed_course("DB", topics=[("T", "not_started")])
     c3, _ = seed_course("Italian", topics=[("T", "not_started")])
-    group_store.set_course_group(c1, g1)
-    group_store.set_course_group(c3, g2)
-    blocks = group_store.sidebar_groups()
+    group_store.set_course_group(c1, g1, 1)
+    group_store.set_course_group(c3, g2, 1)
+    blocks = group_store.sidebar_groups(1)
     # Two non-empty groups first, then the ungrouped block.
     assert blocks[0]["group"]["id"] == g1
     assert [c["id"] for c in blocks[0]["courses"]] == [c1]
@@ -210,8 +210,8 @@ def test_sidebar_groups_structure(tmp_path, monkeypatch):
     assert blocks[2]["group"] is None
     assert [c["id"] for c in blocks[2]["courses"]] == [c2]
     # An empty group is not listed in the sidebar at all.
-    group_store.create_group("Empty")
-    assert len(group_store.sidebar_groups()) == 3
+    group_store.create_group(1, "Empty")
+    assert len(group_store.sidebar_groups(1)) == 3
 
 
 # --- intra-group Roommate synthesis (P5) --------------------------------
@@ -219,19 +219,19 @@ def test_sidebar_groups_structure(tmp_path, monkeypatch):
 
 def test_peer_course_finds_active_groupmate(tmp_path, monkeypatch):
     _, a_id, b_id = _seed_grouped(tmp_path, monkeypatch)
-    peer = peer_course(a_id)
+    peer = peer_course(a_id, 1)
     assert peer is not None
     assert peer["id"] == b_id
     assert peer["current_topic_title"] == "TB"
     # A third, PAUSED course in the group is never a peer.
     c3, _ = seed_course("Course C", status="paused",
                         topics=[("TC", "not_started")])
-    g_id = group_store.list_groups()[0]["id"]
-    group_store.set_course_group(c3, g_id)
-    assert peer_course(c3) is None
+    g_id = group_store.list_groups(1)[0]["id"]
+    group_store.set_course_group(c3, g_id, 1)
+    assert peer_course(c3, 1) is None
     # An ungrouped course has no peer.
     solo, _ = seed_course("Solo", topics=[("TS", "not_started")])
-    assert peer_course(solo) is None
+    assert peer_course(solo, 1) is None
 
 
 def test_build_intra_group_prompt_parses_and_retries():
@@ -249,10 +249,10 @@ def test_build_intra_group_prompt_parses_and_retries():
 
 def test_generate_due_prompts_bridges_group_pair(tmp_path, monkeypatch):
     _, a_id, b_id = _seed_grouped(tmp_path, monkeypatch)
-    created = roommate.generate_due_prompts(FakeProvider([GOOD]))
+    created = roommate.generate_due_prompts(FakeProvider([GOOD]), 1)
     # Both courses were due → one bridge from each side.
     assert len(created) == 2
-    rows = list_all_prompts()
+    rows = list_all_prompts(1)
     by_course = {r["course_id"]: r for r in rows}
     assert by_course[a_id]["connection_type"] == "intra_group"
     assert by_course[a_id]["secondary_course_id"] == b_id
@@ -261,14 +261,14 @@ def test_generate_due_prompts_bridges_group_pair(tmp_path, monkeypatch):
     # Journal rows carry BOTH course titles for the ↔ display.
     assert rows[0]["secondary_course_title"] is not None
     # Second pass: nothing due (prompts are fresh) → no extra prompts.
-    assert roommate.generate_due_prompts(FakeProvider([GOOD])) == []
+    assert roommate.generate_due_prompts(FakeProvider([GOOD]), 1) == []
 
 
 def test_generate_external_without_group_peer(tmp_path, monkeypatch):
     _init(tmp_path, monkeypatch)
     cid, _ = seed_course("Solo", topics=[("T", "not_started")])
-    roommate.generate_due_prompts(FakeProvider([GOOD]))
-    rows = list_all_prompts()
+    roommate.generate_due_prompts(FakeProvider([GOOD]), 1)
+    rows = list_all_prompts(1)
     assert len(rows) == 1
     assert rows[0]["course_id"] == cid
     assert rows[0]["connection_type"] == "external"
@@ -280,16 +280,16 @@ def test_save_prompt_validates_secondary(tmp_path, monkeypatch):
     a_id, _ = seed_course("A", topics=[("T", "not_started")])
     b_id, _ = seed_course("B", topics=[("T", "not_started")])
     with pytest.raises(ValueError):
-        save_prompt(a_id, "f", "p", secondary_course_id=a_id,
+        save_prompt(a_id, "f", "p", 1, secondary_course_id=a_id,
                     connection_type="intra_group")
     with pytest.raises(ValueError):
-        save_prompt(a_id, "f", "p", secondary_course_id=99999,
+        save_prompt(a_id, "f", "p", 1, secondary_course_id=99999,
                     connection_type="intra_group")
     with pytest.raises(ValueError):
-        save_prompt(a_id, "f", "p", secondary_course_id=b_id,
+        save_prompt(a_id, "f", "p", 1, secondary_course_id=b_id,
                     connection_type="weird")
     # A valid intra-group prompt saves cleanly.
-    pid = save_prompt(a_id, "cache × b-tree", "Bridge.",
+    pid = save_prompt(a_id, "cache × b-tree", "Bridge.", 1,
                       secondary_course_id=b_id, connection_type="intra_group")
     row = _prompt_row(pid)
     assert row["secondary_course_id"] == b_id
@@ -298,9 +298,9 @@ def test_save_prompt_validates_secondary(tmp_path, monkeypatch):
 
 def test_delete_course_nulls_secondary_references(tmp_path, monkeypatch):
     _, a_id, b_id = _seed_grouped(tmp_path, monkeypatch)
-    pid = save_prompt(a_id, "cache × b-tree", "Bridge.",
+    pid = save_prompt(a_id, "cache × b-tree", "Bridge.", 1,
                       secondary_course_id=b_id, connection_type="intra_group")
-    delete_course(b_id)
+    delete_course(b_id, 1)
     row = _prompt_row(pid)
     assert row["secondary_course_id"] is None  # no dangling bridge
 
@@ -334,23 +334,23 @@ def test_group_routes_create_assign_delete(tmp_path, monkeypatch):
                              "course_ids": [str(c_id)]},
                        follow_redirects=False)
     assert resp.status_code == 303
-    groups = group_store.list_groups()
+    groups = group_store.list_groups(1)
     assert len(groups) == 1
     g_id = groups[0]["id"]
-    assert [c["id"] for c in group_store.courses_in_group(g_id)] == [c_id]
+    assert [c["id"] for c in group_store.courses_in_group(g_id, 1)] == [c_id]
 
     # Move the course out via the assign route (3-dots menu path).
     resp = client.post(f"/courses/{c_id}/group",
                        data={"group_id": "", "next": "/"},
                        follow_redirects=False)
     assert resp.status_code == 303
-    assert group_store.courses_in_group(g_id) == []
+    assert group_store.courses_in_group(g_id, 1) == []
 
     # Delete the group with the Option-B 'ungroup' action.
     resp = client.post(f"/groups/{g_id}/delete",
                        data={"action": "ungroup"}, follow_redirects=False)
     assert resp.status_code == 303
-    assert group_store.get_group(g_id) is None
+    assert group_store.get_group(g_id, 1) is None
     assert client.get(f"/courses/{c_id}").status_code == 200
 
 
@@ -436,7 +436,7 @@ def test_group_creation_discoverable_on_dashboard(tmp_path, monkeypatch):
 def test_journal_shows_intra_group_bridge(tmp_path, monkeypatch):
     client = make_client(tmp_path, monkeypatch)
     _, a_id, _ = _seed_grouped(tmp_path, monkeypatch)
-    roommate.generate_due_prompts(FakeProvider([GOOD]))
+    roommate.generate_due_prompts(FakeProvider([GOOD]), 1)
     resp = client.get("/roommate")
     assert resp.status_code == 200
     assert "Course A" in resp.text

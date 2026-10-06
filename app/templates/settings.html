@@ -20,12 +20,28 @@
   <div class="settings-section">
     <h2>AI Provider</h2>
     <p>
-      <strong>API Key:</strong> <code>{{ settings.api_key_masked }}</code>
+      <strong>Server API Key:</strong> <code>{{ settings.api_key_masked }}</code>
     </p>
     <p class="form-hint">
-      For security, the full key is not displayed. To change it, edit your
-      <code>.env</code> file and restart the app.
+      The app server can use a default key from <code>AI_API_KEY</code>.<br>
+      Your personal key is stored privately and is not shown here.
     </p>
+
+    {% if user %}
+    <div class="form-group" style="max-width:420px;margin-top:1rem">
+      <label for="personal_ai_key">Your personal OpenAI/OpenRouter key</label>
+      <input type="password" id="personal_ai_key" name="personal_ai_key" value="" placeholder="Paste a new key here" autocomplete="off">
+      {% if settings.has_byok %}
+      <p class="form-hint">Stored key: <code>{{ settings.byok_masked }}</code></p>
+      {% endif %}
+    </div>
+    <label class="checkbox-label" style="margin-top:0.75rem">
+      <input type="checkbox" name="clear_personal_ai_key">
+      <span><strong>Remove my saved personal key</strong></span>
+    </label>
+    {% else %}
+    <p class="form-hint">Sign in to save your own API key for the hybrid BYOK mode.</p>
+    {% endif %}
   </div>
 
   <div class="settings-section">

@@ -24,6 +24,17 @@ Full reasoning and the principle each maps to: `docs/00-PRINCIPLES.md`.
 - Feedback (Tutor gap notes, Editor reviews) should feel specific and a little
   uncomfortable, never like empty encouragement.
 - Coming back after a break should feel like picking up a conversation, not starting over.
+- On a mobile phone, it should feel like an intentional, calm, distraction-free pocket reading
+  room — installable via PWA with bottom navigation, responsive tap targets, and proactive
+  serendipitous insights.
+
+## Web-Hosted & Multi-User Dimension (Phases 12–16)
+- Any learner can sign up with their email and password to receive their own completely
+  isolated private university.
+- AI costs are sustainable and transparent: learners can bring their own API keys (BYOK)
+  encrypted at rest, or take advantage of an initial free trial quota provided by the host.
+- Absolute data sovereignty: learners have full agency (P7) to export their entire curriculum,
+  interviews, and review history to Markdown/JSON, or delete their account permanently.
 
 ## Relationship to the source material
 The five roles (Advisor, Librarian, Tutor, Editor, Roommate) map directly to five roles

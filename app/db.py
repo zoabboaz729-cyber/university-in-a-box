@@ -181,6 +181,72 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("DROP TABLE sources")
         conn.execute("ALTER TABLE sources_migrated RENAME TO sources")
 
+    # ---- Phase 12: multi-tenant foundation --------------------------------
+    # A pre-Phase-12 database has the old single-user `users` shape and no
+    # `user_id` columns. Everything below is idempotent and never loses a row:
+    # existing single-user data is adopted by user_id = 1, so the FIRST account
+    # to register (which is assigned id 1, the users table being otherwise
+    # empty) inherits it, exactly as the local owner expects.
+    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "email" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    if "password_hash" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+    if "encrypted_ai_key" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN encrypted_ai_key TEXT")
+    if "ai_quota_used" not in user_cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN ai_quota_used "
+            "INTEGER NOT NULL DEFAULT 0"
+        )
+
+    # Add user_id to every tenant table that lacks it. ADD COLUMN with a
+    # constant NOT NULL DEFAULT backfills existing rows with the default in
+    # SQLite, so legacy rows become user_id = 1 with no extra UPDATE.
+    # course_groups / courses already carried a (nullable) user_id from the
+    # Phase 11 design, so they are simply skipped here.
+    for table in (
+        "course_groups", "courses", "topics", "advisor_interviews", "sources",
+        "tutor_sessions", "tutor_turns", "editor_reviews", "roommate_prompts",
+        "activity_log",
+    ):
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if cols and "user_id" not in cols:
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN user_id "
+                "INTEGER NOT NULL DEFAULT 1"
+            )
+
+    # _dash_visits moved from one global row (id=1) to one row per user.
+    # SQLite cannot re-key a table's PRIMARY KEY, so rebuild it; the single
+    # legacy row becomes user_id = 1's row.
+    dash_cols = {row[1] for row in conn.execute("PRAGMA table_info(_dash_visits)")}
+    if "user_id" not in dash_cols:
+        conn.execute(
+            "CREATE TABLE _dash_visits_migrated ("
+            "user_id INTEGER PRIMARY KEY REFERENCES users(id), "
+            "visit_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "INSERT INTO _dash_visits_migrated (user_id, visit_at) "
+            "SELECT 1, visit_at FROM _dash_visits LIMIT 1"
+        )
+        conn.execute("DROP TABLE _dash_visits")
+        conn.execute(
+            "ALTER TABLE _dash_visits_migrated RENAME TO _dash_visits"
+        )
+
+    # Indexes on user_id (created here, never in schema.sql: on a legacy
+    # database the CREATE INDEX would run before the ADD COLUMN and break boot).
+    for table in (
+        "course_groups", "courses", "topics", "advisor_interviews", "sources",
+        "tutor_sessions", "tutor_turns", "editor_reviews", "roommate_prompts",
+        "activity_log",
+    ):
+        conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_user ON {table}(user_id)"
+        )
+
 def init_db() -> Path:
     """Create all tables if they don't exist yet. Safe to call on every boot."""
     path = get_db_path()

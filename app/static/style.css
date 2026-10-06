@@ -1281,3 +1281,59 @@ details > p { font-size: 0.84rem; color: var(--ink-soft); }
   .topic-list-item { grid-template-columns: 1.5rem 1fr; }
   .topic-list-item > .pill { grid-column: 2; }
 }
+
+/* ---- Auth pages (Phase 12 — sign in / register) ----------- */
+/* Standalone pages (auth_base.html) so a logged-out visitor never renders the
+   sidebar, which needs a signed-in user. */
+.auth-body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.25rem;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--paper-card);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+}
+.auth-card .wordmark { display: inline-block; margin-bottom: 1.25rem; }
+.auth-form .form-group { margin-bottom: 0.9rem; }
+.auth-form .form-actions { margin-top: 1.1rem; }
+.auth-form .btn { width: 100%; }
+
+/* ---- Signed-in user footer in the sidebar (Phase 12) ------ */
+.sidebar-user {
+  padding-top: 1rem;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.sidebar-user-email {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-logout { margin: 0; }
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.link-btn:hover { text-decoration: underline; }
+

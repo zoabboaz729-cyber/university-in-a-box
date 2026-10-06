@@ -233,7 +233,7 @@ def test_full_alter_loop_and_restart(tmp_path, monkeypatch):
     assert resp.status_code == 303
 
     from app.roles.source_store import list_sources
-    rows = list_sources(topic_id)
+    rows = list_sources(topic_id, 1)
     verdicts = {r["label"]: r["verdict"] for r in rows}
     verified_at = {r["label"]: r["verified_at"] for r in rows}
     assert verdicts["Strong textbook"] == "keep"
@@ -255,7 +255,7 @@ def test_full_alter_loop_and_restart(tmp_path, monkeypatch):
             "SELECT id FROM tutor_sessions ORDER BY id DESC LIMIT 1"
         ).fetchone()
     session_id = row["id"]
-    sess = get_session(session_id)
+    sess = get_session(session_id, 1)
     turn = sess["turns"][0]
     assert turn["question"].count("?") == 1  # exactly one question
     resp = client.post(
@@ -265,12 +265,12 @@ def test_full_alter_loop_and_restart(tmp_path, monkeypatch):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    sess = get_session(session_id)
+    sess = get_session(session_id, 1)
     assert len(sess["turns"]) == 2            # follow-up persisted
     assert sess["turns"][0]["user_answer"].startswith("I keep getting")
     resp = client.post(f"/tutor/{session_id}/end", follow_redirects=False)
     assert resp.status_code == 303
-    sess = get_session(session_id)
+    sess = get_session(session_id, 1)
     assert sess["ended_at"] is not None
     assert "subjunctive" in sess["gap_note"].lower()
     topic_page = client.get(f"/topics/{topic_id}").text

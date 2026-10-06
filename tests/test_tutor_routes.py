@@ -37,7 +37,7 @@ def test_full_session_start_answer_end(tmp_path, monkeypatch):
     assert page.text.count("<textarea") == 1
     from app.roles.tutor_store import get_session
     sid = int(session_url.rsplit("/", 1)[-1])
-    turn_id = get_session(sid)["turns"][0]["id"]
+    turn_id = get_session(sid, user_id=1)["turns"][0]["id"]
     resp2 = client.post(f"/tutor/{sid}/answer",
                         data={"turn_id": str(turn_id), "answer": "My answer"},
                         follow_redirects=False)
@@ -60,12 +60,12 @@ def test_empty_answer_rerenders_no_write(tmp_path, monkeypatch):
                       follow_redirects=False).headers["location"]
     from app.roles.tutor_store import get_session
     sid = int(url.rsplit("/", 1)[-1])
-    turn_id = get_session(sid)["turns"][0]["id"]
+    turn_id = get_session(sid, user_id=1)["turns"][0]["id"]
     resp = client.post(f"/tutor/{sid}/answer",
                        data={"turn_id": str(turn_id), "answer": "   "})
     assert resp.status_code == 200
     assert "Please write an answer" in resp.text
-    assert len(get_session(sid)["turns"]) == 1
+    assert len(get_session(sid, user_id=1)["turns"]) == 1
 
 
 def test_double_start_resumes_open_session(tmp_path, monkeypatch):
@@ -133,7 +133,7 @@ def test_tutor_answer_refreshes_days_since_on_dashboard(tmp_path, monkeypatch):
                       follow_redirects=False).headers["location"]
     sid = int(url.rsplit("/", 1)[-1])
     from app.roles.tutor_store import get_session
-    turn_id = get_session(sid)["turns"][0]["id"]
+    turn_id = get_session(sid, user_id=1)["turns"][0]["id"]
     client.post(f"/tutor/{sid}/answer",
                 data={"turn_id": str(turn_id), "answer": "An answer"},
                 follow_redirects=False)
@@ -159,7 +159,7 @@ def test_tutor_retry_generates_when_no_pending(tmp_path, monkeypatch):
 
     # Now answer the turn
     from app.roles.tutor_store import get_session
-    turn_id = get_session(sid)["turns"][0]["id"]
+    turn_id = get_session(sid, user_id=1)["turns"][0]["id"]
     client.post(f"/tutor/{sid}/answer",
                 data={"turn_id": str(turn_id), "answer": "Answer 1"},
                 follow_redirects=False)
@@ -179,6 +179,6 @@ def test_tutor_retry_generates_when_no_pending(tmp_path, monkeypatch):
     assert retry_resp.headers["location"] == f"/tutor/{sid}"
 
     # Verify new turn was created
-    session_after = get_session(sid)
+    session_after = get_session(sid, user_id=1)
     assert len(session_after["turns"]) == 2
     assert session_after["turns"][1]["question"] == "What is the core idea here?"

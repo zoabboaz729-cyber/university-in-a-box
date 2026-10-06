@@ -33,17 +33,17 @@ def test_add_and_list_sources_roundtrip(tmp_path, monkeypatch):
                                topics=[("Lib Topic", "not_started")])
     topic_id = topic_ids[0]
     add_source(topic_id, "Strong Book", "https://example.com/book",
-               "keep", "Good for background. Deep and credible.")
+               "keep", "Good for background. Deep and credible.", 1)
     add_source(topic_id, "Weak Link", "https://example.com/click",
-               "skip", "Good for nothing now. Thin listicle.")
-    rows = list_sources(topic_id)
+               "skip", "Good for nothing now. Thin listicle.", 1)
+    rows = list_sources(topic_id, 1)
     assert [r["label"] for r in rows] == ["Weak Link", "Strong Book"]
-    shelf = list_sources(topic_id, keep_only=True)
+    shelf = list_sources(topic_id, 1, keep_only=True)
     assert [r["label"] for r in shelf] == ["Strong Book"]
     with pytest.raises(ValueError):
-        add_source(topic_id, "   ", "ref", "keep", "reason")
+        add_source(topic_id, "   ", "ref", "keep", "reason", 1)
     with pytest.raises(ValueError):
-        add_source(9999, "Label", "ref", "keep", "reason")
+        add_source(9999, "Label", "ref", "keep", "reason", 1)
 
 
 # --- Stage 3 Task 7: verify() reads the source, then judges ----------------
@@ -171,52 +171,55 @@ def test_store_requires_exactly_one_scope(tmp_path, monkeypatch):
     course_id, topic_ids = _seed(tmp_path, monkeypatch, "Scope Course")
     topic_id = topic_ids[0]
     with pytest.raises(ValueError):
-        add_source(None, "Neither", "ref", "keep", "reason")
+        add_source(None, "Neither", "ref", "keep", "reason", 1)
     with pytest.raises(ValueError):
-        add_source(topic_id, "Both", "ref", "keep", "reason", None, course_id)
+        add_source(topic_id, "Both", "ref", "keep", "reason", 1,
+                   course_id=course_id)
     with pytest.raises(ValueError):
-        add_source(None, "Bad course", "ref", "keep", "reason", None, 9999)
+        add_source(None, "Bad course", "ref", "keep", "reason", 1,
+                   course_id=9999)
 
 
 def test_unverified_verdict_is_accepted_and_kept(tmp_path, monkeypatch):
     _, topic_ids = _seed(tmp_path, monkeypatch, "Unver Course")
     topic_id = topic_ids[0]
     source_id = add_source(topic_id, "Unread", "https://example.com/x",
-                           "unverified", "Saved without verification: nope.")
-    row = get_source(source_id)
+                           "unverified", "Saved without verification: nope.", 1)
+    row = get_source(source_id, 1)
     assert row["verdict"] == "unverified"
     assert row["verified_at"] is None
     with pytest.raises(ValueError):
-        add_source(topic_id, "Bogus", "ref", "probably", "reason")
+        add_source(topic_id, "Bogus", "ref", "probably", "reason", 1)
 
 
 def test_mark_verified_then_delete(tmp_path, monkeypatch):
     _, topic_ids = _seed(tmp_path, monkeypatch, "Mark Course")
     topic_id = topic_ids[0]
     source_id = add_source(topic_id, "Later Read", "ref", "unverified",
-                           "Saved without verification: x.")
+                           "Saved without verification: x.", 1)
     assert mark_verified(source_id, "keep", "Fit: yes. Access: free.",
-                         "2026-09-14 10:00:00") is True
-    row = get_source(source_id)
+                         "2026-09-14 10:00:00", 1) is True
+    row = get_source(source_id, 1)
     assert (row["verdict"], row["verified_at"]) == (
         "keep", "2026-09-14 10:00:00")
     # "unverified" is not a judgment: mark_verified must refuse to store it.
     with pytest.raises(ValueError):
-        mark_verified(source_id, "unverified", "x", "y")
-    assert delete_source(source_id) is True
-    assert get_source(source_id) is None
-    assert delete_source(source_id) is False
+        mark_verified(source_id, "unverified", "x", "y", 1)
+    assert delete_source(source_id, 1) is True
+    assert get_source(source_id, 1) is None
+    assert delete_source(source_id, 1) is False
 
 
 def test_course_level_listing_excludes_topic_level_rows(tmp_path, monkeypatch):
     course_id, topic_ids = _seed(tmp_path, monkeypatch, "List Course")
-    add_source(None, "Course Wide", "ref", "keep", "reason", None, course_id)
-    add_source(topic_ids[0], "Topic Only", "ref", "keep", "reason")
-    course_rows = list_course_sources(course_id)
+    add_source(None, "Course Wide", "ref", "keep", "reason", 1,
+               course_id=course_id)
+    add_source(topic_ids[0], "Topic Only", "ref", "keep", "reason", 1)
+    course_rows = list_course_sources(course_id, 1)
     assert [r["label"] for r in course_rows] == ["Course Wide"]
     assert course_rows[0]["course_id"] == course_id
     assert course_rows[0]["topic_id"] is None
-    assert [r["label"] for r in list_sources(topic_ids[0])] == ["Topic Only"]
+    assert [r["label"] for r in list_sources(topic_ids[0], 1)] == ["Topic Only"]
 
 
 def test_unverified_verdict_is_accepted_and_kept(tmp_path, monkeypatch):
@@ -229,12 +232,12 @@ def test_unverified_verdict_is_accepted_and_kept(tmp_path, monkeypatch):
     topic_id = topic_ids[0]
     source_id = add_source(topic_id, "Unread", "https://example.com/x",
                            "unverified", "Saved without verification: nope.",
-                           None)
-    row = get_source(source_id)
+                           1)
+    row = get_source(source_id, 1)
     assert row["verdict"] == "unverified"
     assert row["verified_at"] is None
     with pytest.raises(ValueError):
-        add_source(topic_id, "Bogus", "ref", "probably", "reason")
+        add_source(topic_id, "Bogus", "ref", "probably", "reason", 1)
 
 
 def test_mark_verified_then_delete_source(tmp_path, monkeypatch):
@@ -246,17 +249,17 @@ def test_mark_verified_then_delete_source(tmp_path, monkeypatch):
                                topics=[("Mark Topic", "not_started")])
     topic_id = topic_ids[0]
     source_id = add_source(topic_id, "Later Read", "ref", "unverified",
-                           "Saved without verification: x.", None)
+                           "Saved without verification: x.", 1)
     assert mark_verified(source_id, "keep", "Fit: yes. Access: free.",
-                         "2026-09-14 10:00:00") is True
-    row = get_source(source_id)
+                         "2026-09-14 10:00:00", 1) is True
+    row = get_source(source_id, 1)
     assert (row["verdict"], row["verified_at"]) == (
         "keep", "2026-09-14 10:00:00")
     with pytest.raises(ValueError):
-        mark_verified(source_id, "unverified", "x", "y")
-    assert delete_source(source_id) is True
-    assert get_source(source_id) is None
-    assert delete_source(source_id) is False
+        mark_verified(source_id, "unverified", "x", "y", 1)
+    assert delete_source(source_id, 1) is True
+    assert get_source(source_id, 1) is None
+    assert delete_source(source_id, 1) is False
 
 
 def test_old_rows_migrate_to_unverified(tmp_path, monkeypatch):
@@ -270,8 +273,8 @@ def test_old_rows_migrate_to_unverified(tmp_path, monkeypatch):
     _, topic_ids = seed_course("Old Course",
                                topics=[("Old Topic", "not_started")])
     topic_id = topic_ids[0]
-    add_source(topic_id, "Legacy", "ref", "keep", "reason")
-    row = get_source(list_sources(topic_id)[0]["id"])
+    add_source(topic_id, "Legacy", "ref", "keep", "reason", 1)
+    row = get_source(list_sources(topic_id, 1)[0]["id"], 1)
     assert row["verified_at"] is None
     import sqlite3
     with sqlite3.connect(get_db_path()) as conn:

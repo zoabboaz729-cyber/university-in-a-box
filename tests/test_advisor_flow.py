@@ -143,7 +143,7 @@ def test_resume_after_restart_lands_on_next_step(monkeypatch, tmp_path):
 
 def _make_uniform_group(duration="12 weeks"):
     return group_store.create_group(
-        "Semester 1", timeframe_mode="uniform", timeframe_duration=duration)
+        1, "Semester 1", timeframe_mode="uniform", timeframe_duration=duration)
 
 
 def _answer_to_sequencing(client):

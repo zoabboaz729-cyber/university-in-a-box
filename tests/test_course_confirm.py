@@ -248,9 +248,9 @@ def test_course_page_404_for_missing_course(monkeypatch, tmp_path):
 def test_confirm_curriculum_validates_input(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     init_db()
-    course_id = start_interview("Spanish")
+    course_id = start_interview("Spanish", 1)
     topic = {"title": "T", "milestone_description": "M", "time_box": "1 week"}
     with pytest.raises(ValueError):
-        course_store.confirm_curriculum(course_id, "   ", [topic], {})
+        course_store.confirm_curriculum(course_id, "   ", [topic], {}, 1)
     with pytest.raises(ValueError):
-        course_store.confirm_curriculum(course_id, "Title", [], {})
+        course_store.confirm_curriculum(course_id, "Title", [], {}, 1)

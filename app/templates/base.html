@@ -84,6 +84,15 @@
     </div>
 
     {% block sidebar_extra %}{% endblock %}
+
+    {% if request.state.user %}
+    <div class="sidebar-user">
+      <span class="sidebar-user-email" title="{{ request.state.user.email }}">{{ request.state.user.name or request.state.user.email }}</span>
+      <form method="post" action="/logout" class="sidebar-logout">
+        <button type="submit" class="link-btn">Sign out</button>
+      </form>
+    </div>
+    {% endif %}
   </aside>
 
   <main>

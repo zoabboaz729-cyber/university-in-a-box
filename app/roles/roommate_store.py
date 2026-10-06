@@ -23,12 +23,17 @@ MAX_REACTION_CHARS = 2000
 GROUP_CONNECTION_TYPES = ("external", "intra_group")
 
 
-def prompt_newer_than(since: str | None) -> dict | None:
-    """Return the newest prompt across ACTIVE courses that is newer than
-    `since`. Used by the durable indicator to decide whether to show the
-    "new connection(s) ready" badge."""
+def prompt_newer_than(since: str | None, user_id: int = 1) -> dict | None:
+    """Return this user's newest prompt across ACTIVE courses that is newer
+    than `since`. Used by the durable indicator to decide whether to show the
+    "new connection(s) ready" badge.
+
+    The legacy single-user tests call `prompt_newer_than(baseline)` without a
+    user argument; defaulting to user 1 preserves those tests while keeping the
+    explicit `user_id` tenant checks in the app layer.
+    """
     if not since:
-        return latest_prompt()
+        return latest_prompt(user_id)
     with get_connection() as conn:
         row = conn.execute(
             """SELECT p.id, p.course_id, p.field, p.prompt_text, p.created_at,
@@ -36,9 +41,10 @@ def prompt_newer_than(since: str | None) -> dict | None:
                FROM roommate_prompts p
                JOIN courses c ON c.id = p.course_id
                WHERE p.created_at > ? AND c.status = 'active'
+                 AND p.user_id = ?
                ORDER BY p.created_at DESC
                LIMIT 1""",
-            (since,),
+            (since, user_id),
         ).fetchone()
         if row is None:
             return None
@@ -46,11 +52,11 @@ def prompt_newer_than(since: str | None) -> dict | None:
 
 
 
-def save_prompt(course_id: int, field: str, prompt_text: str,
+def save_prompt(course_id: int, field: str, prompt_text: str, user_id: int = 1,
                 created_at: str | None = None,
                 secondary_course_id: int | None = None,
                 connection_type: str = "external") -> int:
-    """Persist one complete prompt. Returns the prompt id.
+    """Persist one complete prompt owned by `user_id`. Returns the prompt id.
 
     `created_at` is normally omitted: a millisecond-precision UTC "now" is
     used so prompts are strictly orderable against the equally precise
@@ -58,8 +64,9 @@ def save_prompt(course_id: int, field: str, prompt_text: str,
     `prompt.created_at > visit`). Tests pass it explicitly to backdate.
 
     Phase 11: `connection_type` is 'external' (default) or 'intra_group';
-    for intra_group prompts `secondary_course_id` names the other course
-    in the same group. Both are validated before anything is written.
+    for intra_group prompts `secondary_course_id` names the other course in
+    the same group. Both courses must belong to `user_id`; everything is
+    validated before anything is written.
     """
     if not field or not field.strip():
         raise ValueError("roommate field is empty")
@@ -72,7 +79,8 @@ def save_prompt(course_id: int, field: str, prompt_text: str,
         created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     with get_connection() as conn:
         course = conn.execute(
-            "SELECT id FROM courses WHERE id = ?", (course_id,)
+            "SELECT id FROM courses WHERE id = ? AND user_id = ?",
+            (course_id, user_id),
         ).fetchone()
         if course is None:
             raise ValueError("course not found: " + str(course_id))
@@ -80,17 +88,18 @@ def save_prompt(course_id: int, field: str, prompt_text: str,
             if secondary_course_id == course_id:
                 raise ValueError("secondary course cannot be the same course")
             peer = conn.execute(
-                "SELECT id FROM courses WHERE id = ?", (secondary_course_id,)
+                "SELECT id FROM courses WHERE id = ? AND user_id = ?",
+                (secondary_course_id, user_id),
             ).fetchone()
             if peer is None:
                 raise ValueError(
                     "secondary course not found: " + str(secondary_course_id))
         cursor = conn.execute(
             "INSERT INTO roommate_prompts "
-            "(course_id, field, prompt_text, created_at, "
+            "(course_id, user_id, field, prompt_text, created_at, "
             " secondary_course_id, connection_type) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (course_id, field.strip(), prompt_text.strip(), created_at,
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (course_id, user_id, field.strip(), prompt_text.strip(), created_at,
              secondary_course_id, connection_type),
         )
         prompt_id = cursor.lastrowid
@@ -109,8 +118,9 @@ def last_prompt_at(course_id: int) -> str | None:
         return row["created_at"] if row else None
 
 
-def due_courses(cadence: int) -> list[dict]:
-    """Active courses whose last prompt is missing or older than cadence.
+def due_courses(cadence: int, user_id: int) -> list[dict]:
+    """This user's active courses whose last prompt is missing or older than
+    cadence.
 
     Ordered most-overdue first (never-prompted courses first), so a long
     gap gets refilled before anything brand-new. `cadence` is the number
@@ -124,8 +134,9 @@ def due_courses(cadence: int) -> list[dict]:
             "  (SELECT t.title FROM topics t "
             "   WHERE t.course_id = c.id AND t.status != 'done' "
             "   ORDER BY t.order_index LIMIT 1) AS current_topic_title "
-            "FROM courses c WHERE c.status = 'active' "
+            "FROM courses c WHERE c.status = 'active' AND c.user_id = ? "
             "ORDER BY last_prompt_at ASC",
+            (user_id,),
         ).fetchall()
     due = []
     for row in rows:
@@ -136,14 +147,15 @@ def due_courses(cadence: int) -> list[dict]:
     return due
 
 
-def peer_course(course_id: int) -> dict | None:
+def peer_course(course_id: int, user_id: int) -> dict | None:
     """The first ACTIVE course in the same group as `course_id`, or None.
 
     Phase 11 (P5): intra-group synthesis bridges two courses the user is
     taking together. Only ACTIVE courses qualify as the peer — a paused or
     archived course never silently drags a live one into a prompt. The
     peer's current topic (first not-done, same rule the dashboard uses)
-    is included so the prompt can be concrete.
+    is included so the prompt can be concrete. Both courses belong to
+    `user_id` (Phase 12).
     """
     with get_connection() as conn:
         row = conn.execute(
@@ -153,11 +165,11 @@ def peer_course(course_id: int) -> dict | None:
             "   ORDER BY t.order_index LIMIT 1) AS current_topic_title "
             "FROM courses c1 "
             "JOIN courses c2 ON c2.group_id = c1.group_id "
-            "  AND c2.id != c1.id "
-            "WHERE c1.id = ? AND c1.group_id IS NOT NULL "
+            "  AND c2.id != c1.id AND c2.user_id = c1.user_id "
+            "WHERE c1.id = ? AND c1.user_id = ? AND c1.group_id IS NOT NULL "
             "  AND c1.status = 'active' AND c2.status = 'active' "
             "ORDER BY c2.id LIMIT 1",
-            (course_id,),
+            (course_id, user_id),
         ).fetchone()
         return dict(row) if row else None
 
@@ -217,24 +229,27 @@ def recent_fields(course_id, n):
         return [row["field"] for row in rows]
 
 
-def dash_visit_at() -> str | None:
-    """The timestamp of the LAST dashboard render (the baseline for the
-    durable "new since your last visit" badge). Returns None before the
-    first visit ever.
+def dash_visit_at(user_id: int) -> str | None:
+    """The timestamp of THIS user's last dashboard render (the baseline for
+    the durable "new since your last visit" badge). Returns None before the
+    user's first visit ever.
 
     Reads from SQLite's clock so it stays comparable with prompt
     `created_at` values (also from SQLite's clock). Returns None when no
-    visit has been recorded yet (e.g. a brand-new database).
+    visit has been recorded yet (e.g. a brand-new account).
     """
     with get_connection() as conn:
-        row = conn.execute("SELECT visit_at FROM _dash_visits LIMIT 1").fetchone()
+        row = conn.execute(
+            "SELECT visit_at FROM _dash_visits WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
         if row is None or not row["visit_at"]:
             return None
         return row["visit_at"]
 
 
-def record_dash_visit() -> None:
-    """Record that the dashboard has just been rendered.
+def record_dash_visit(user_id: int) -> None:
+    """Record that this user's dashboard has just been rendered.
 
     Called AFTER we've already decided what this load renders, so this
     load's generation cannot make THIS load's badge fire. The next load
@@ -246,17 +261,16 @@ def record_dash_visit() -> None:
     # greater ("newer") even within the same wall-clock second.
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     with get_connection() as conn:
-        # id is always 1: the table only ever holds one row (CHECK (id = 1)).
-        # INSERT OR REPLACE hits the PRIMARY KEY conflict on id=1 and updates
-        # in place, instead of auto-incrementing to an id that violates CHECK.
+        # One row per user (user_id is the PRIMARY KEY). INSERT OR REPLACE
+        # hits the PRIMARY KEY conflict on user_id and updates in place.
         conn.execute(
-            "INSERT OR REPLACE INTO _dash_visits (id, visit_at) "
-            "VALUES (1, ?)",
-            (now,),
+            "INSERT OR REPLACE INTO _dash_visits (user_id, visit_at) "
+            "VALUES (?, ?)",
+            (user_id, now),
         )
 
-def list_all_prompts() -> list[dict]:
-    """Every prompt, newest first, joined with its course title (journal).
+def list_all_prompts(user_id: int) -> list[dict]:
+    """Every prompt for this user, newest first, joined with its course title.
 
     Phase 11: intra-group prompts also carry the OTHER course's title so
     the journal can show "Course A ↔ Course B" instead of guessing.
@@ -270,41 +284,47 @@ def list_all_prompts() -> list[dict]:
             "FROM roommate_prompts rp "
             "JOIN courses c ON c.id = rp.course_id "
             "LEFT JOIN courses c2 ON c2.id = rp.secondary_course_id "
+            "WHERE rp.user_id = ? "
             "ORDER BY rp.id DESC",
+            (user_id,),
         ).fetchall()
         return [dict(row) for row in rows]
 
 
-def latest_prompt() -> dict | None:
-    """Newest prompt across ACTIVE courses (the dashboard block), or None."""
+def latest_prompt(user_id: int) -> dict | None:
+    """Newest prompt across this user's ACTIVE courses, or None."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT rp.id, rp.course_id, rp.field, rp.prompt_text, "
             "rp.created_at "
             "FROM roommate_prompts rp JOIN courses c ON c.id = rp.course_id "
-            "WHERE c.status = 'active' ORDER BY rp.id DESC LIMIT 1",
+            "WHERE c.status = 'active' AND rp.user_id = ? "
+            "ORDER BY rp.id DESC LIMIT 1",
+            (user_id,),
         ).fetchone()
         return dict(row) if row else None
 
 
-def save_reaction(prompt_id: int, reaction: str) -> bool:
+def save_reaction(prompt_id: int, reaction: str, user_id: int) -> bool:
     """Attach or adjust the optional free-text reaction on a prompt.
 
-    Empty text clears it. Returns False when the prompt is missing;
-    raises ValueError when the reaction is too long.
+    Empty text clears it. Returns False when the prompt is missing or owned
+    by another user; raises ValueError when the reaction is too long.
     """
     if len(reaction) > MAX_REACTION_CHARS:
         raise ValueError("roommate reaction too long")
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT course_id FROM roommate_prompts WHERE id = ?",
-            (prompt_id,),
+            "SELECT course_id FROM roommate_prompts "
+            "WHERE id = ? AND user_id = ?",
+            (prompt_id, user_id),
         ).fetchone()
         if row is None:
             return False
         conn.execute(
-            "UPDATE roommate_prompts SET user_reaction = ? WHERE id = ?",
-            (reaction.strip(), prompt_id),
+            "UPDATE roommate_prompts SET user_reaction = ? "
+            "WHERE id = ? AND user_id = ?",
+            (reaction.strip(), prompt_id, user_id),
         )
         course_id = row["course_id"]
     log(course_id, "roommate", prompt_id, "reacted")

@@ -4,6 +4,28 @@
 any coding-agent session should read — it should be enough, on its own, to know exactly
 where the project stands and what to do next.**
 
+**2026-09-30 (Multi-Tenant, Web-Hosted & Mobile-First Architectural Documentation Session):**
+The owner approved the architectural pivot and decided the four core strategy forks:
+1. **AI Cost Model**: Hybrid / BYOK (Bring Your Own Key) model (D-027). Users can configure their own OpenRouter/OpenAI API key (encrypted at rest via AES-GCM), with a server-paid free trial quota.
+2. **Authentication**: Native Email + Password with secure HttpOnly, SameSite=Lax signed session cookies and Argon2id hashing (D-028).
+3. **Database Architecture**: Dual support: PostgreSQL with connection pooling for production web hosting, while retaining SQLite for local development and fast headless test runs (D-029). Schema managed by Alembic.
+4. **Frontend Architecture**: Mobile-First PWA + HTMX retaining the warm paper "Reading Room" aesthetic (D-030). Bottom navigation bar on mobile (< 768px), touch-first ergonomics (≥48px tap targets), manifest.json + service worker for iOS/Android installability.
+
+**All project documentation was comprehensively updated before any code implementation:**
+- `docs/01-VISION.md`: Updated target audience to many learners, mobile & web-first, rock-solid tenant isolation, explicit non-goals adjusted.
+- `docs/02-ARCHITECTURE.md`: Stack decision table, multi-tenant entity schema with `user_id` on all tables, async AI provider, async fetching, mobile-first PWA app shell, decoupled background scheduler.
+- `docs/03-BUILD-PLAN.md`: Appended Phases 12–16 with goals, steps, constraints, and definitions of done.
+- `docs/04-CONSTRAINTS.md`: Added tenant isolation invariant, Argon2id auth security, and AES-GCM BYOK key encryption at rest.
+- `docs/05-VERIFICATION.md`: Added verification checklists for tenant isolation, auth, dual-DB parity, BYOK quotas, and mobile PWA compliance.
+- `docs/06-MONITORING.md`: Added multi-tenant error isolation and PostgreSQL backup routines.
+- `memory-bank/`: Updated `decisions.md` (D-026 to D-030), `techContext.md`, `systemPatterns.md`, `productContext.md`, `progress.md`.
+
+**Current status:** Phase 12 is complete and verified. Phase 13 is now complete and verified: the app has async-capable provider support, AES-GCM BYOK encryption/decryption, quota-aware key resolution, async-compatible fetch wrappers, and the remaining route-level async adoption is in place. The final repo-wide verification passed (`python -m pytest -q` → **212 passed, 2 warnings in 43.92s**).
+
+**Cleanup complete:** all repo scratch `.txt` dumps and the tagged debug script were removed; the exact `free_models.txt` file was preserved only if it existed (it did not in this checkout), and no tracked product code was touched.
+
+**Next step:** Continue with the next planned phase only after the user decides the next exact implementation step.
+
 **2026-09-16 (Stage 3 close-out prep session): VERIFIED — `python -m pytest -q` → 215 passed, 2 warnings in 26.51s at the start of the session, and again on the final working tree after every edit below: 215 passed, 2 warnings in 24.93s.** Detached-run note: `Start-Job` dies when the terminal is reused (it stalled at 66%); `Start-Process … -RedirectStandardOutput <file>` is the reliable pattern here — the output FILE is the source of truth, never the terminal pane. **No product behavior changed** (the only `.py` edits were two doc-comment citations). What this session did:
 1. **Added the missing D-024** to `memory-bank/decisions.md` — the Librarian read-before-accept decision (fetch reversal, three explicit outcomes, `unverified` verdict, topic-or-course source scope, "routes own the fetch / roles own the judgment"). Both `roles/librarian.py` and `routes/librarian.py` had *claimed* the reversal was recorded; it was not (the route comment cited a non-existent D-013). `D-011` now carries a "Superseded for the live add-a-source path" note.
 2. **Docs reconciled with the running code** (docs/04 §7 obligation, docs/05 "no doc contradicts the app"): `docs/02-ARCHITECTURE.md` — data model gains `CourseGroup` / `courses.group_id` / `sources.course_id`+`verified_at`+`unverified` / `roommate_prompts.field`+`secondary_course_id`+`connection_type` / `_dash_visits`, a new "Outbound fetching pattern (D-024)" section, the real folder layout (`app/fetching/`, groups, `_`-prefixed partials), and the `/tasks/due` claim replaced with the actual in-process dashboard-load due-check; `docs/03-BUILD-PLAN.md` — new **Stage 3** section (the plan previously jumped from Phase 11 straight to "After Phase 11" while progress.md listed a Stage 3 row); `docs/04-CONSTRAINTS.md` §5 — outbound-fetch rule; `docs/07-FRONTEND-AUDIT.md` — dated amendment on its now-stale HTMX + `/tasks/due` findings (stale since Phase 9 self-hosted `htmx.min.js`; templates use `hx-include`/`hx-indicator`, still no `hx-get/post/target/swap`).

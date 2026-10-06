@@ -1,0 +1,45 @@
+{% extends "auth_base.html" %}
+{% block title %}Create your account — University in a Box{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Create your account</h1>
+  <p class="subtitle">Your own private university — isolated, and yours to keep.</p>
+</div>
+
+{% if error %}
+<div class="callout callout-error"><strong>Error:</strong> {{ error }}</div>
+{% endif %}
+
+<form method="post" action="/register" class="auth-form">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <div class="form-group">
+    <label for="name">Your name</label>
+    <input type="text" id="name" name="name" value="{{ name or '' }}"
+           autocomplete="name" required>
+  </div>
+  <div class="form-group">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" value="{{ email or '' }}"
+           autocomplete="email" required>
+  </div>
+  <div class="form-group">
+    <label for="password">Password (at least 8 characters)</label>
+    <input type="password" id="password" name="password"
+           autocomplete="new-password" required>
+  </div>
+  <div class="form-group">
+    <label for="confirm_password">Confirm password</label>
+    <input type="password" id="confirm_password" name="confirm_password"
+           autocomplete="new-password" required>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Create account</button>
+  </div>
+</form>
+
+<p class="form-hint">
+  Already have an account?
+  <a href="/login{% if next_url and next_url != '/' %}?next={{ next_url }}{% endif %}">Sign in</a>.
+</p>
+{% endblock %}

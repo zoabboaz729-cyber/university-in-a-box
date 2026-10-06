@@ -17,6 +17,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.ai.provider import call_provider_async
+
 # Marker: malformed verdict JSON is a parse failure (retry the LLM
 # once), but a ProviderError means the endpoint is down (don't retry —
 # the provider already retried internally).
@@ -127,4 +129,23 @@ def verify(scope_descriptor: str, label: str, reference: str, source_text: str,
         # Bad JSON from the model — retry the LLM once with the same
         # prompt, then let the error surface clearly.
         raw = provider.generate(system_prompt, user_message)
+        return _parse_verification(raw)
+
+
+async def verify_async(scope_descriptor: str, label: str, reference: str,
+                      source_text: str, provider) -> SourceVerification:
+    """Async variant used by librarian routes so outbound fetch and AI calls are non-blocking."""
+    system_prompt = VERIFY_PROMPT_FILE.read_text(encoding="utf-8")
+    user_message = "\n".join([
+        scope_descriptor,
+        "Source label: " + label,
+        "Source URL or reference: " + (reference or ""),
+        "--- SOURCE TEXT (truncated) ---",
+        source_text,
+    ])
+    raw = await call_provider_async(provider, system_prompt, user_message)
+    try:
+        return _parse_verification(raw)
+    except PARSE_ERRORS:
+        raw = await call_provider_async(provider, system_prompt, user_message)
         return _parse_verification(raw)

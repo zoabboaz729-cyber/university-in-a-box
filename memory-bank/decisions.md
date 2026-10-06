@@ -4,6 +4,59 @@
 changes. Newest at the top. These are defaults set during planning; they're changeable, not
 commandments — but changing one should get its own entry explaining why.*
 
+### D-030 — Mobile-First PWA with "The Reading Room" Design Tokens & HTMX
+**Date:** 2026-09-30 (Roadmap planning; owner approved)
+**Context:** The owner requested a "web and mobile first" experience. A mobile-native rewrite in React Native or Flutter would discard the clean, model-friendly Jinja2/HTMX templates and create heavy build/pipeline complexity (violating P8).
+**Decision:** Adopt a Progressive Web App (PWA) architecture built on our existing "Reading Room" aesthetic:
+1. Mobile-first app shell: persistent bottom navigation bar on mobile viewports (< 768px), bottom-sheet context menus for course 3-dots actions, keyboard-aware scrolling for tutor sessions.
+2. Web App Manifest (`manifest.json`) and lightweight Service Worker (`sw.js`) enabling installability on iOS and Android home screens with standalone display mode.
+3. Cache-first strategy for self-hosted fonts, style tokens, and HTMX scripts.
+4. Keep server-rendered templates and HTMX; no frontend build step.
+**Consequences:** True mobile installability and native-like responsiveness while keeping the codebase 100% server-rendered, lightweight, and model-friendly.
+
+---
+
+### D-029 — Dual Database Architecture: PostgreSQL for Production, SQLite for Local Dev/Testing
+**Date:** 2026-09-30 (Roadmap planning; owner approved)
+**Context:** Multi-user web hosting introduces concurrent writes across dozens of users creating courses, logging tutor turns, and verifying sources simultaneously. SQLite locks the file during writes (`SQLITE_BUSY`) and cannot scale across multiple web worker processes. However, requiring PostgreSQL for local development and test runs increases friction.
+**Decision:** Implement dual-database support in `app/db.py`:
+1. Use PostgreSQL with connection pooling (`psycopg` / `asyncpg` / SQLAlchemy Core) when `DATABASE_URL` is set in production.
+2. Fall back cleanly to SQLite (`data/university.db` or `:memory:`) for local development and headless test runs.
+3. Schema managed and migrated via Alembic.
+**Consequences:** Production gains enterprise-grade concurrency, row-level locking, and connection pooling; test suite runs instantly without external database dependencies.
+
+---
+
+### D-028 — Native Email + Password Authentication with Secure Session Cookies
+**Date:** 2026-09-30 (Roadmap planning; owner approved)
+**Context:** Multi-user platform requires secure identity and session management without vendor lock-in or third-party OAuth app setup requirements.
+**Decision:** Implement native Email + Password authentication in `app/auth/`:
+1. Password hashing using Argon2id (`argon2-cffi`).
+2. Session cookies using signed, HttpOnly, SameSite=Lax (or Strict), Secure cookies (`itsdangerous`).
+3. Dependency injection `get_current_user` in FastAPI to enforce authentication across all learning routes and isolate data queries.
+**Consequences:** Zero external auth dependencies; full self-containment; standard login, registration, and logout flows.
+
+---
+
+### D-027 — Hybrid / BYOK (Bring Your Own Key) AI Cost Model
+**Date:** 2026-09-30 (Roadmap planning; owner approved)
+**Context:** In a multi-user hosted service, unmetered AI usage (Advisor interviews, Tutor sessions, Librarian verifications, Roommate prompts) by many users would lead to unsustainable API costs if paid entirely by the host.
+**Decision:** Implement a Hybrid / BYOK (Bring Your Own Key) model:
+1. Users can configure their own OpenRouter/OpenAI API key (and custom base URL/model) in Settings.
+2. User BYOK keys are encrypted at rest in the database using AES-GCM via `APP_SECRET_KEY` and decrypted only in memory when dispatching LLM calls.
+3. New users receive an initial server-paid free trial quota (e.g. 1 course, 3 tutor sessions). Once exhausted, they are prompted to provide their personal key in Settings.
+**Consequences:** The platform can host unlimited users without financial risk; users have complete transparency and control over their LLM costs and model choices.
+
+---
+
+### D-026 — Pivot from Local-First Single-User to Multi-Tenant Web-Hosted Platform
+**Date:** 2026-09-30 (Roadmap planning; owner approved)
+**Context:** The owner requested transforming University in a Box from a local-first single-user application to a web-hosted, multi-user, mobile-first platform.
+**Decision:** Pivot architecture to multi-tenant web hosting (Phases 12–16) while preserving ALTER pedagogical integrity, user data sovereignty (P6/P7), and small-model maintainability (P8). D-004 is formally superseded by this phase roadmap.
+**Consequences:** Every table is partitioned and indexed by `user_id`. Queries strictly filter on `user_id = current_user.id`. The build plan gains Phases 12–16.
+
+---
+
 ### D-025 — Delete the description-only triage() path (owner option (a))
 **Date:** 2026-09-16 (Stage 3 close-out; owner chose option (a) from activeContext "Open questions")
 **Context:** After Stage 3 Task 7 rewired every Librarian route to `librarian.verify()`,

@@ -4,12 +4,13 @@ GET /advisor/new → topic form. POST → creates draft course, redirects to ste
 GET /advisor/{id} → exactly one question (or resume at the next unanswered step).
 GET /advisor/{id}/edit/{step} → back-button: re-ask an answered step for editing.
 """
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from pathlib import Path
 
+from app.auth.dependencies import get_current_user
 from app.roles import advisor, group_store
 from app.roles.activity import log
 from app.roles.interview_store import get_interview, save_answer, start_interview
@@ -26,11 +27,12 @@ def new_interview(request: Request):
 
 
 @router.post("/new")
-def create_interview(topic: str = Form(...), group_id: str = Form("")):
+def create_interview(topic: str = Form(...), group_id: str = Form(""),
+                     user: dict = Depends(get_current_user)):
     topic = topic.strip()
     if not topic:
         return RedirectResponse("/advisor/new", status_code=303)
-    interview_id = start_interview(topic)
+    interview_id = start_interview(topic, user["id"])
     # Task 5 (D-023): "Create inside a group" pre-fills the sequencing
     # step from the group's uniform timeframe. The interview id IS the
     # draft course id; drafts stay invisible in group views, so this has
@@ -41,13 +43,13 @@ def create_interview(topic: str = Form(...), group_id: str = Form("")):
         except ValueError:
             gid = None
         if gid is not None:
-            group_store.set_course_group(interview_id, gid)
+            group_store.set_course_group(interview_id, gid, user["id"])
     log(interview_id, "interview", interview_id, "started")
     return RedirectResponse(f"/advisor/{interview_id}", status_code=303)
 
 
 def render_step(request: Request, interview_id: int, step: str, interview: dict,
-                error: str = ""):
+                error: str = "", *, user_id: int):
     """Render exactly one question. Shared by show/edit/submit/review-error."""
     steps = advisor.STEPS
     saved_answer = interview["answers"].get(step, "")
@@ -56,7 +58,8 @@ def render_step(request: Request, interview_id: int, step: str, interview: dict,
     # group's uniform timeframe, but ONLY when the step is still empty.
     # An already-answered step always shows the user's own answer.
     if step == "sequencing" and not saved_answer.strip():
-        timeframe = group_store.uniform_timeframe_of_course(interview_id)
+        timeframe = group_store.uniform_timeframe_of_course(interview_id,
+                                                            user_id)
         if timeframe is not None:
             group_name, duration = timeframe
             saved_answer = duration
@@ -99,33 +102,38 @@ def not_found(request: Request, message: str):
 
 
 @router.get("/{interview_id}", response_class=HTMLResponse)
-def show_step(request: Request, interview_id: int):
-    interview = get_interview(interview_id)
+def show_step(request: Request, interview_id: int,
+              user: dict = Depends(get_current_user)):
+    interview = get_interview(interview_id, user["id"])
     if interview is None:
         return not_found(request, "Interview not found. It may have been deleted.")
     step = advisor.next_step(set(interview["answers"]))
     if step is None:
         return RedirectResponse(f"/advisor/{interview_id}/review", status_code=303)
-    return render_step(request, interview_id, step, interview)
+    return render_step(request, interview_id, step, interview,
+                       user_id=user["id"])
 
 
 @router.get("/{interview_id}/edit/{step}", response_class=HTMLResponse)
-def edit_step(request: Request, interview_id: int, step: str):
-    interview = get_interview(interview_id)
+def edit_step(request: Request, interview_id: int, step: str,
+              user: dict = Depends(get_current_user)):
+    interview = get_interview(interview_id, user["id"])
     if interview is None or step not in advisor.STEPS:
         return not_found(request, "Interview or step not found.")
     if step not in interview["answers"]:
         # Nothing to edit — send them to where they actually are.
         return RedirectResponse(f"/advisor/{interview_id}", status_code=303)
-    return render_step(request, interview_id, step, interview)
+    return render_step(request, interview_id, step, interview,
+                       user_id=user["id"])
 
 
 @router.post("/{interview_id}")
 def submit_answer(
     request: Request, interview_id: int,
     step: str = Form(...), answer: str = Form(...),
+    user: dict = Depends(get_current_user),
 ):
-    interview = get_interview(interview_id)
+    interview = get_interview(interview_id, user["id"])
     if interview is None or step not in advisor.STEPS:
         return not_found(request, "Interview or step not found.")
     if not answer.strip():
@@ -133,10 +141,12 @@ def submit_answer(
         return render_step(
             request, interview_id, step, interview,
             error="Please write an answer before continuing.",
+            user_id=user["id"],
         )
-    save_answer(interview_id, step, advisor.question_for(step), answer)
+    save_answer(interview_id, step, advisor.question_for(step), answer,
+                user["id"])
     log(interview_id, "interview", interview_id, "answered:" + step)
-    interview = get_interview(interview_id)
+    interview = get_interview(interview_id, user["id"])
     if advisor.next_step(set(interview["answers"])) is None:
         return RedirectResponse(f"/advisor/{interview_id}/review", status_code=303)
     return RedirectResponse(f"/advisor/{interview_id}", status_code=303)

@@ -10,7 +10,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.ai.provider import ProviderError
+from app.ai.provider import ProviderError, call_provider_async
 
 # Marker: malformed draft JSON is a parse failure (retry the LLM once),
 # but a ProviderError means the endpoint itself is down (don't retry —
@@ -131,4 +131,19 @@ def build_draft(topic: str, answers: dict, provider) -> CurriculumDraft:
         # then let the error surface clearly. ProviderError is NOT caught here:
         # it means the endpoint is down, and the provider already retried.
         raw = provider.generate(system_prompt, user_message)
+        return _parse_draft(raw)
+
+
+async def build_draft_async(topic: str, answers: dict, provider) -> CurriculumDraft:
+    """Async variant used by the advisor review route to avoid blocking worker threads."""
+    system_prompt = PROMPT_FILE.read_text(encoding="utf-8")
+    lines = ["Topic the user wants to learn: " + topic]
+    for step in STEPS:
+        lines.append(step.upper() + ": " + answers.get(step, ""))
+    user_message = "\n".join(lines)
+    raw = await call_provider_async(provider, system_prompt, user_message)
+    try:
+        return _parse_draft(raw)
+    except PARSE_ERRORS:
+        raw = await call_provider_async(provider, system_prompt, user_message)
         return _parse_draft(raw)

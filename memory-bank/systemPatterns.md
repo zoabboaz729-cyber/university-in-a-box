@@ -109,7 +109,19 @@ See `memory-bank/decisions.md` for the full log with dates and reasoning. Curren
   `load_config()`), cadence + pause-default (persisted to `.env`), DB path +
   backup staleness (`roommate_store.last_backup_info`).
 
+## Multi-Tenant & Web/Mobile Patterns (Phases 12–16)
+- **Tenant Isolation Pattern**: Every data access function receives `user_id: int` as an explicit parameter and executes SQL containing `WHERE user_id = :user_id`. Direct lookups by entity ID (e.g. `course_id`, `topic_id`) must always verify ownership via `WHERE id = :id AND user_id = :user_id`.
+- **Authentication & Route Guard Pattern**: FastAPI dependency `get_current_user` validates session cookie and returns the active `User` model. All protected routers inject this dependency; unauthenticated requests receive a clean 303 redirect to `/login`.
+- **Dual-Database Engine Pattern**: `app/db.py` inspects `DATABASE_URL`. If configured, it connects to PostgreSQL using connection pooling; otherwise, it falls back to SQLite at `data/university.db` for local development and test runs. Alembic manages schema migrations across both.
+- **Hybrid/BYOK Resolution Pattern**: Prior to making an LLM call, the active key is resolved: user-configured BYOK key (decrypted in memory via AES-GCM) is preferred; otherwise, the server checks the user's `ai_quota_used < MAX_FREE_QUOTA`, increments quota, and uses the host key. If quota is exceeded and no BYOK key exists, a user-facing `QuotaExceeded` error is raised.
+- **Mobile-First PWA App Shell Pattern**: Viewports `< 768px` render a persistent bottom navigation bar (`Courses`, `Insights`, `Groups`, `Settings`) and open context menus in accessible bottom sheets. Touch targets maintain ≥ 48×48px. `manifest.json` and `sw.js` enable standalone mobile installability with asset precaching.
+- **Decoupled Async Scheduling Pattern**: Background scheduler runs independently of page loads to evaluate due courses, generate Roommate prompts, and dispatch Web Push notifications.
+
 ## Anti-patterns explicitly avoided (see docs/04-CONSTRAINTS.md)
+- No unscoped database queries that omit `user_id = current_user.id`.
+- No plain-text storage or logging of user BYOK API keys.
+- No blocking synchronous HTTP or LLM calls in FastAPI route handlers (`httpx.AsyncClient` required).
+- No heavy JavaScript SPA frameworks (React/Next.js/Vue) — preserve server-rendered Jinja2 + HTMX simplicity.
 - No business logic in route handlers or templates.
 - No ORM magic hiding what SQL actually runs.
 - No role module calling another role module directly — they compose only through

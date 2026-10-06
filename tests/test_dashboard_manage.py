@@ -41,7 +41,7 @@ def test_topic_done_moves_dashboard_resume_pointer(tmp_path, monkeypatch):
     from app.roles.editor import Review
     from app.roles.review_store import save_review
     save_review(topic_ids[0], "Milestone for Step One", "User work",
-                Review(strengths="s", biggest_weakness="w", next_edit="e"))
+                Review(strengths="s", biggest_weakness="w", next_edit="e"), 1)
     response = client.post(f"/topics/{topic_ids[0]}/status",
                            data={"status": "done"}, follow_redirects=False)
     assert response.status_code == 303

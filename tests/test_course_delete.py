@@ -28,11 +28,11 @@ def _populate_full_course(title="Complex Course"):
         )
 
     # Librarian source
-    source_id = add_source(topic_a, "Book", "https://example.com/book", "keep", "Essential")
+    source_id = add_source(topic_a, "Book", "https://example.com/book", "keep", "Essential", 1)
 
     # Tutor session + turn
-    session_id = start_session(topic_a)
-    add_turn(session_id, "What is X?")
+    session_id = start_session(topic_a, 1)
+    add_turn(session_id, "What is X?", 1)
 
     # Editor review
     save_review(
@@ -40,10 +40,11 @@ def _populate_full_course(title="Complex Course"):
         "Milestone A",
         "Submission draft text",
         Review(strengths="Good intro", biggest_weakness="Needs depth", next_edit="Expand section 2"),
+        1,
     )
 
     # Roommate prompt
-    prompt_id = save_prompt(course_id, "Biology", "Compare to cell membranes")
+    prompt_id = save_prompt(course_id, "Biology", "Compare to cell membranes", 1)
 
     # Activity log
     log(course_id, "course", course_id, "test_action")
@@ -68,7 +69,7 @@ def test_delete_course_cascades_all_tables(tmp_path, monkeypatch):
         assert conn.execute("SELECT COUNT(*) FROM activity_log WHERE course_id = ?", (course_id,)).fetchone()[0] > 0
 
     # Act
-    ok = delete_course(course_id)
+    ok = delete_course(course_id, 1)
     assert ok is True
 
     # Post-condition: assert everything is purged
@@ -86,7 +87,7 @@ def test_delete_course_cascades_all_tables(tmp_path, monkeypatch):
 
 def test_delete_nonexistent_course_returns_false(tmp_path, monkeypatch):
     make_client(tmp_path, monkeypatch)
-    assert delete_course(99999) is False
+    assert delete_course(99999, 1) is False
 
 
 def test_delete_course_route_and_404_pages(tmp_path, monkeypatch):
@@ -123,27 +124,27 @@ def test_delete_course_roommate_fallback(tmp_path, monkeypatch):
     c1, _, _, _, _ = _populate_full_course("Course 1")
     c2, _, _, _, _ = _populate_full_course("Course 2")
 
-    save_prompt(c1, "Field1", "Prompt for Course 1")
-    save_prompt(c2, "Field2", "Prompt for Course 2")
+    save_prompt(c1, "Field1", "Prompt for Course 1", 1)
+    save_prompt(c2, "Field2", "Prompt for Course 2", 1)
 
     # Latest prompt is Course 2
-    latest = latest_prompt()
+    latest = latest_prompt(1)
     assert latest is not None
     assert latest["course_id"] == c2
 
     # Delete Course 2
-    delete_course(c2)
+    delete_course(c2, 1)
 
     # Latest prompt falls back cleanly to Course 1
-    fallback = latest_prompt()
+    fallback = latest_prompt(1)
     assert fallback is not None
     assert fallback["course_id"] == c1
 
     # Delete Course 1
-    delete_course(c1)
+    delete_course(c1, 1)
 
     # Now latest prompt is None
-    assert latest_prompt() is None
+    assert latest_prompt(1) is None
 
 
 def test_delete_ui_rendered_on_pages(tmp_path, monkeypatch):

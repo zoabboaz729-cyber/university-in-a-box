@@ -53,6 +53,14 @@ journal and still there after a restart.
 6. Roommate prompt (Phase 6) — still fires on schedule and logs.
 7. Restart the app entirely between each of the above — nothing resets or corrupts.
 
+## Multi-Tenant & Web/Mobile Verification Checklist (Phases 12–16)
+1. **Tenant Isolation**: Register User A and User B. Create courses, sources, and tutor sessions under User A. Log in as User B: confirm dashboard, sidebar, courses list, and groups are completely empty. Attempt to access `/courses/{user_a_course_id}` directly as User B → returns clean 404.
+2. **Auth & Sessions**: Registration, login, logout, and protected route redirection to `/login` when unauthenticated. Verify session cookie has `HttpOnly` and `SameSite` flags.
+3. **Dual-Database Parity**: Verify the entire test suite passes against SQLite (`data/university.db`) and against a PostgreSQL instance via `DATABASE_URL`.
+4. **Hybrid/BYOK Quota Check**: Set user BYOK key in `/settings`; verify LLM calls use the decrypted key. Clear key; verify server-provided free quota increments with each call and renders clear `QuotaExceeded` message once the limit is reached.
+5. **Mobile Viewport & PWA Check**: Emulate mobile viewport (`< 768px`) in Chrome/Safari: confirm bottom navigation bar renders with touch targets ≥ 48px; confirm course 3-dots actions open bottom sheet; check `manifest.json` loads cleanly; verify Service Worker registers and caches static assets.
+6. **Data Sovereignty (P6/P7)**: In `/settings`, trigger Data Export (`GET /settings/export`) → confirms generated ZIP contains complete readable Markdown and JSON files. Trigger Account Deletion (`POST /settings/account/delete`) → confirms all user rows are deleted atomically across all 11 tables.
+
 ## Self-verification discipline for the coding agent
 Because the coding agent (GLM-Flash-5.3 / DeepSeek V4) can be confidently wrong, prefer
 *showing* verification over *asserting* it:

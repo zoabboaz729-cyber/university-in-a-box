@@ -2,15 +2,24 @@
 -- Tables mirror the data model in docs/02-ARCHITECTURE.md.
 -- Plain .sql file, no migration framework yet.
 
+-- Phase 12: a real multi-tenant identity. `email`/`password_hash` are set by
+-- the auth module; `encrypted_ai_key` (AES-GCM BYOK key, Phase 13) and
+-- `ai_quota_used` (server-paid free-trial counter) are provisioned here.
+-- Legacy single-user databases are upgraded in-place by db._migrate(), which
+-- adds the missing columns and assigns every pre-existing row user_id = 1.
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
     name TEXT NOT NULL,
+    encrypted_ai_key TEXT,
+    ai_quota_used INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS course_groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER REFERENCES users(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     name TEXT NOT NULL,
     description TEXT,
     timeframe_mode TEXT NOT NULL DEFAULT 'individual', -- 'uniform' vs 'individual'
@@ -21,7 +30,7 @@ CREATE TABLE IF NOT EXISTS course_groups (
 
 CREATE TABLE IF NOT EXISTS courses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER REFERENCES users(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     title TEXT NOT NULL,
     destination TEXT,
     baseline TEXT,
@@ -36,6 +45,7 @@ CREATE TABLE IF NOT EXISTS courses (
 CREATE TABLE IF NOT EXISTS topics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     course_id INTEGER NOT NULL REFERENCES courses(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     order_index INTEGER NOT NULL,
     title TEXT NOT NULL,
     milestone_description TEXT,
@@ -46,6 +56,7 @@ CREATE TABLE IF NOT EXISTS topics (
 CREATE TABLE IF NOT EXISTS advisor_interviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     course_id INTEGER REFERENCES courses(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     question TEXT NOT NULL,
     answer TEXT,
     step TEXT NOT NULL
@@ -55,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_advisor_interviews_course
 
 CREATE TABLE IF NOT EXISTS sources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     -- Exactly one of topic_id / course_id is non-null (app-layer rule):
     -- a source attaches to a single Topic OR to the Course as a whole.
     -- topic_id is nullable since Stage 3 Task 6 (course-level sources).
@@ -73,6 +85,7 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS tutor_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     topic_id INTEGER NOT NULL REFERENCES topics(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     ended_at TEXT,
     gap_note TEXT
@@ -81,6 +94,7 @@ CREATE TABLE IF NOT EXISTS tutor_sessions (
 CREATE TABLE IF NOT EXISTS tutor_turns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL REFERENCES tutor_sessions(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     question TEXT NOT NULL,
     user_answer TEXT,
     order_index INTEGER NOT NULL
@@ -89,6 +103,7 @@ CREATE TABLE IF NOT EXISTS tutor_turns (
 CREATE TABLE IF NOT EXISTS editor_reviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     topic_id INTEGER NOT NULL REFERENCES topics(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     milestone_ref TEXT,
     submitted_text TEXT NOT NULL,
     strengths TEXT,
@@ -100,6 +115,7 @@ CREATE TABLE IF NOT EXISTS editor_reviews (
 CREATE TABLE IF NOT EXISTS roommate_prompts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     course_id INTEGER NOT NULL REFERENCES courses(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     field TEXT,
     prompt_text TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -112,15 +128,18 @@ CREATE TABLE IF NOT EXISTS roommate_prompts (
     connection_type TEXT NOT NULL DEFAULT 'external'
 );
 
+-- Phase 12: one "last dashboard visit" row PER USER (was a single global row
+-- keyed id=1). The durable-badge logic compares a prompt's created_at to this.
 CREATE TABLE IF NOT EXISTS _dash_visits (
-    id         INTEGER PRIMARY KEY CHECK (id = 1),
-    visit_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    user_id    INTEGER PRIMARY KEY REFERENCES users(id),
+    visit_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 
 CREATE TABLE IF NOT EXISTS activity_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     course_id INTEGER REFERENCES courses(id),
+    user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
     entity_type TEXT NOT NULL,
     entity_id INTEGER,
     action TEXT NOT NULL,

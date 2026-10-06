@@ -8,11 +8,12 @@ POST /roommate/prompts/{id}/reaction saves that reaction.
 """
 from pathlib import Path
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
+from app.auth.dependencies import get_current_user
 from app.roles.roommate_store import (
     MAX_REACTION_CHARS,
     list_all_prompts,
@@ -26,28 +27,30 @@ router = APIRouter()
 
 
 @router.get("/roommate", response_class=HTMLResponse)
-def journal(request: Request):
+def journal(request: Request, user: dict = Depends(get_current_user)):
     return templates.TemplateResponse(
-        request, "roommate.html", {"prompts": list_all_prompts()}
+        request, "roommate.html",
+        {"prompts": list_all_prompts(user["id"])}
     )
 
 
 @router.post("/roommate/prompts/{prompt_id}/reaction")
-def reaction(request: Request, prompt_id: int, reaction: str = Form(...)):
+def reaction(request: Request, prompt_id: int, reaction: str = Form(...),
+             user: dict = Depends(get_current_user)):
     if len(reaction) > MAX_REACTION_CHARS:
         return templates.TemplateResponse(
             request, "roommate.html",
-            {"prompts": list_all_prompts(),
+            {"prompts": list_all_prompts(user["id"]),
              "error": f"Keep the reaction under {MAX_REACTION_CHARS} "
                       "characters."},
             status_code=400,
         )
     try:
-        ok = save_reaction(prompt_id, reaction)
+        ok = save_reaction(prompt_id, reaction, user["id"])
     except ValueError as exc:
         return templates.TemplateResponse(
             request, "roommate.html",
-            {"prompts": list_all_prompts(), "error": str(exc)},
+            {"prompts": list_all_prompts(user["id"]), "error": str(exc)},
             status_code=400,
         )
     if not ok:

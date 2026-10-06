@@ -4,6 +4,7 @@ The transcript is the only way the Librarian can "read" a video, so an
 unfetchable transcript must surface as an explicit unavailable result
 (Stage 3 Task 7 outcome 3): never a crash, never a silent accept.
 """
+import asyncio
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlparse
 
@@ -35,17 +36,16 @@ def youtube_video_id(url: str) -> str | None:
     return None
 
 
-def fetch_transcript(url: str) -> TranscriptResult:
-    """Fetch a transcript; on ANY failure return ok=False + a reason."""
+async def fetch_transcript_async(url: str) -> TranscriptResult:
+    """Async fetch a transcript while keeping failure handling explicit."""
     video_id = youtube_video_id(url)
     if not video_id:
         return TranscriptResult(
             ok=False, text="", reason="not a YouTube watch/short URL")
     try:
-        # list() → pick the first (default-language) transcript → fetch it.
-        transcript_list = YouTubeTranscriptApi().list(video_id)
+        transcript_list = await asyncio.to_thread(YouTubeTranscriptApi().list, video_id)
         transcript = next(iter(transcript_list))
-        fetched = transcript.fetch()
+        fetched = await asyncio.to_thread(transcript.fetch)
         text = " ".join(snippet.text for snippet in fetched)
     except Exception as exc:
         return TranscriptResult(
@@ -54,3 +54,8 @@ def fetch_transcript(url: str) -> TranscriptResult:
         return TranscriptResult(
             ok=False, text="", reason="transcript was empty")
     return TranscriptResult(ok=True, text=text, reason="")
+
+
+def fetch_transcript(url: str) -> TranscriptResult:
+    """Compatibility wrapper for sync callers; phase 13 routes use async I/O."""
+    return asyncio.run(fetch_transcript_async(url))

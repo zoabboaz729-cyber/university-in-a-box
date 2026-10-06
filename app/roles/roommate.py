@@ -153,13 +153,16 @@ def build_intra_group_prompt(course_a_title: str, course_a_destination: str,
         return _parse_connection(raw, recent_labels)
 
 
-def generate_due_prompts(provider) -> list[int]:
+def generate_due_prompts(provider, user_id: int) -> list[int]:
     """Generate and persist one prompt per due active course.
 
     Called on every dashboard load (Phase 6 step 2 — a local single-user
     app needs no job scheduler). Each course is isolated: a provider or
     parse failure logs one 'generate_failed' activity row and the course
     waits for the next dashboard load — the page itself always renders.
+
+    Phase 12: `user_id` scopes every store call — only THIS user's due
+    courses are considered and prompts are owned by them.
 
     Phase 11 (P5): a due active course that shares a group with another
     ACTIVE course gets an intra-group cross-course bridge prompt (the
@@ -168,8 +171,8 @@ def generate_due_prompts(provider) -> list[int]:
     is built. Both are saved through the same store and journal.
     """
     created = []
-    for course in roommate_store.due_courses(cadence_days()):
-        peer = roommate_store.peer_course(course["id"])
+    for course in roommate_store.due_courses(cadence_days(), user_id):
+        peer = roommate_store.peer_course(course["id"], user_id)
         try:
             if peer is not None:
                 connection = build_intra_group_prompt(
@@ -212,7 +215,7 @@ def generate_due_prompts(provider) -> list[int]:
             created.append(
                 roommate_store.save_prompt(
                     course["id"], connection.field, connection.prompt,
-                    **save_kwargs))
+                    user_id, **save_kwargs))
         except ValueError as exc:
             # Only reachable if a course vanished mid-check (e.g. the peer
             # was deleted between the peer query and the save).

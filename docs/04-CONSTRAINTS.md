@@ -51,9 +51,15 @@ ambiguous ones. Build accordingly:
 ## 5. Security & config basics
 - No API keys or secrets committed to the repo. `.env` is gitignored; `.env.example` holds
   only variable names and dummy values.
-- The app is local/single-user by default — do not add network-exposed listeners beyond
-  localhost without the user explicitly asking for remote access, and if that's ever asked
-  for, treat it as a new phase with its own constraints, not a quick tweak.
+- **Tenant Isolation Invariant**: In multi-user mode, every single database query reading or
+  mutating user data MUST filter strictly by `user_id = current_user.id`. Never write an
+  unscoped `SELECT * FROM courses` or similar query.
+- **Authentication Security**: Passwords must be hashed using Argon2id (`argon2-cffi`). Session
+  cookies must be `HttpOnly`, `Secure` (in production), and `SameSite=Lax` or `Strict`, signed with
+  a secure `APP_SECRET_KEY`.
+- **BYOK Key Encryption at Rest**: User-provided API keys (BYOK) must be encrypted at rest in the
+  database using AES-GCM with a server secret key. Decryption occurs only in memory when
+  dispatching the request; user keys are never logged and never returned in plaintext to the UI.
 - The one outbound-network capability is reading a source the user explicitly added (D-024).
   Keep it that way: all such I/O goes through `app/fetching/` behind its SSRF guards (http/https
   only; private/loopback/link-local/reserved addresses and unsafe redirects refused; size-capped;

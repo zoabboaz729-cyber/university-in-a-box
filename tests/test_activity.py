@@ -87,8 +87,8 @@ def test_migrate_upgrades_old_activity_log_and_backfills(tmp_path, monkeypatch):
 
     course_id, topic_ids = seed_course("Mig Course",
                                        topics=[("M", "not_started")])
-    sid = start_session(topic_ids[0])
-    prompt_id = save_prompt(course_id, "architecture", "Prompt text.")
+    sid = start_session(topic_ids[0], 1)
+    prompt_id = save_prompt(course_id, "architecture", "Prompt text.", 1)
     # Legacy-shaped rows, exactly as earlier phases wrote them.
     with sqlite3.connect(get_db_path()) as conn:
         conn.executescript(

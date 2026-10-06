@@ -20,18 +20,19 @@ from app.roles.tutor_store import last_gap_for_course
 LIST_STATUSES = ("active", "paused", "archived", "done")
 
 
-def list_dashboard_courses(group_id: int | None = None,
+def list_dashboard_courses(user_id: int, group_id: int | None = None,
                            ungrouped_only: bool = False) -> list[dict]:
-    """All non-draft courses, newest first, with resume pointers.
+    """All of this user's non-draft courses, newest first, with resume pointers.
 
     Phase 11: `group_id` narrows to one Course Group; `ungrouped_only`
     returns only courses in no group. Both filters are optional and
-    combine naturally with the Phase 2 behavior.
+    combine naturally with the Phase 2 behavior. Phase 12: results are
+    always scoped to `user_id`.
     """
     with get_connection() as conn:
         base_sql = ("SELECT id, title, status, created_at, group_id "
-                    "FROM courses WHERE status != 'draft'")
-        params = []
+                    "FROM courses WHERE status != 'draft' AND user_id = ?")
+        params = [user_id]
         if ungrouped_only:
             base_sql += " AND group_id IS NULL"
         elif group_id is not None:
@@ -44,8 +45,8 @@ def list_dashboard_courses(group_id: int | None = None,
             course_id = course["id"]
             topics = conn.execute(
                 "SELECT id, title, status FROM topics "
-                "WHERE course_id = ? ORDER BY order_index",
-                (course_id,),
+                "WHERE course_id = ? AND user_id = ? ORDER BY order_index",
+                (course_id, user_id),
             ).fetchall()
             total = len(topics)
             done = sum(1 for t in topics if t["status"] == "done")

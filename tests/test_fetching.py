@@ -299,9 +299,10 @@ def test_add_source_enforces_exactly_one_scope(tmp_path, monkeypatch):
     course_id, topic_ids = seed_course("C", topics=[("T", "not_started")])
     with pytest.raises(ValueError, match="exactly one"):
         source_store.add_source(topic_ids[0], "Both", "ref", "keep",
-                                "reason", course_id=course_id)
+                                "reason", user_id=1, course_id=course_id)
     with pytest.raises(ValueError, match="exactly one"):
-        source_store.add_source(None, "Neither", "ref", "keep", "reason")
+        source_store.add_source(None, "Neither", "ref", "keep", "reason",
+                                user_id=1)
 
 
 def test_course_level_source_roundtrip(tmp_path, monkeypatch):
@@ -311,16 +312,17 @@ def test_course_level_source_roundtrip(tmp_path, monkeypatch):
     course_id, topic_ids = seed_course("C", topics=[("T", "not_started")])
     source_store.add_source(None, "Course-wide source", "https://x.example",
                             "keep", "Good for the whole course.",
+                            user_id=1,
                             verified_at="2026-09-14 10:00:00",
                             course_id=course_id)
-    rows = source_store.list_course_sources(course_id)
+    rows = source_store.list_course_sources(course_id, 1)
     assert len(rows) == 1
     assert rows[0]["label"] == "Course-wide source"
     assert rows[0]["course_id"] == course_id
     assert rows[0]["topic_id"] is None
     assert rows[0]["verified_at"] == "2026-09-14 10:00:00"
     # Course-level rows never leak into a topic's list.
-    assert source_store.list_sources(topic_ids[0]) == []
+    assert source_store.list_sources(topic_ids[0], 1) == []
 
 
 def test_sources_migration_preserves_existing_rows(tmp_path, monkeypatch):

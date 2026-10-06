@@ -25,16 +25,15 @@ system-generated Roommate prompt never makes a course look studied.
   no separate read state; the newest prompt is the current one).
 
 **Error visibility** — any failed LLM call, DB error, or unhandled exception is
-logged to a local log file (`data/app.log`, via `app/monitor.py` since the Phase 7
-completion pass: lifespan hook + dashboard background-thread + per-course Roommate
-failures + provider final-retry warning + unhandled-exception middleware) and, where
-it affects the current action, shown to the user plainly rather than hidden or
-silently retried forever.
+logged to `data/app.log` (via `app/monitor.py`), or stdout in containerized production.
+In multi-tenant mode, error logs must include `user_id` when authenticated for auditability,
+while masking sensitive credentials and BYOK keys. Failures for one tenant (such as an invalid
+BYOK key or quota limit) must remain isolated and never affect other tenants.
 
-**Backup health** — the app makes it obvious how stale the last backup is: the Settings
-page (`/settings`) shows the DB path plus the newest `data/university.db.backup-*`
-file and its age in days (via `roommate_store.last_backup_info`), per the routine
-defined in Phase 7. The weekly ritual's step 4 (below) reads that note.
+**Backup health** — in local development, Settings shows the age of the newest
+`data/university.db.backup-*` file. In web-hosted production with PostgreSQL, automated
+database snapshot routines (e.g., `pg_dump` cron jobs or managed cloud backups) must be
+verified, and the health status displayed in the admin or system settings overview.
 
 ## B. Project-level monitoring (the coding agent monitoring itself)
 

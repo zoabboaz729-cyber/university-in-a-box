@@ -12,9 +12,10 @@ from app.roles.activity import log
 
 
 def save_review(topic_id: int, milestone_ref: str, submitted_text: str,
-                review) -> int:
+                review, user_id: int) -> int:
     """Persist one complete review. `review` is an app.roles.editor.Review.
-    Returns the review id."""
+    Returns the review id. Raises ValueError when the topic is missing or
+    owned by another user."""
     if not submitted_text or not submitted_text.strip():
         raise ValueError("editor submission is empty")
     for name in ("strengths", "biggest_weakness", "next_edit"):
@@ -23,15 +24,16 @@ def save_review(topic_id: int, milestone_ref: str, submitted_text: str,
             raise ValueError("editor " + name + " is empty")
     with get_connection() as conn:
         topic = conn.execute(
-            "SELECT id, course_id FROM topics WHERE id = ?", (topic_id,)
+            "SELECT id, course_id FROM topics WHERE id = ? AND user_id = ?",
+            (topic_id, user_id),
         ).fetchone()
         if topic is None:
             raise ValueError("topic not found: " + str(topic_id))
         cursor = conn.execute(
-            "INSERT INTO editor_reviews (topic_id, milestone_ref, "
+            "INSERT INTO editor_reviews (topic_id, user_id, milestone_ref, "
             "submitted_text, strengths, biggest_weakness, next_edit) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (topic_id, milestone_ref, submitted_text.strip(),
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (topic_id, user_id, milestone_ref, submitted_text.strip(),
              review.strengths.strip(), review.biggest_weakness.strip(),
              review.next_edit.strip()),
         )
@@ -41,24 +43,26 @@ def save_review(topic_id: int, milestone_ref: str, submitted_text: str,
     return review_id
 
 
-def list_reviews_for_topic(topic_id: int) -> list[dict]:
+def list_reviews_for_topic(topic_id: int, user_id: int) -> list[dict]:
     """All reviews for a topic, newest first (the visible history)."""
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT id, topic_id, milestone_ref, submitted_text, "
             "strengths, biggest_weakness, next_edit, created_at "
-            "FROM editor_reviews WHERE topic_id = ? ORDER BY id DESC",
-            (topic_id,),
+            "FROM editor_reviews WHERE topic_id = ? AND user_id = ? "
+            "ORDER BY id DESC",
+            (topic_id, user_id),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def has_editor_review(topic_id: int) -> bool:
+def has_editor_review(topic_id: int, user_id: int) -> bool:
     """True when at least one review exists for the topic (the done-gate)."""
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT 1 FROM editor_reviews WHERE topic_id = ? LIMIT 1",
-            (topic_id,),
+            "SELECT 1 FROM editor_reviews "
+            "WHERE topic_id = ? AND user_id = ? LIMIT 1",
+            (topic_id, user_id),
         ).fetchone()
         return row is not None
 

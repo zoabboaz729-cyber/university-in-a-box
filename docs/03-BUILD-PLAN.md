@@ -326,8 +326,100 @@ is recorded in `memory-bank/progress.md`; the work is committed.
 
 ---
 
-## After Phase 11
+## Phase 12 — Multi-Tenant Data Foundation, Dual-DB (PostgreSQL + SQLite) & Auth (Email + Password)
 
-The product remains extensible. Future work (multi-topic Roommate cross-linking depth,
-spaced-repetition on gap notes, export/print of a Course, exam simulation) should continue to be
-proposed as new phases appended here.
+**Goal:** Enable many distinct users to securely register, log in, and manage their own isolated courses, groups, and learning transcripts, with dual-database support (PostgreSQL for production web hosting, SQLite for local development and testing).
+
+**Why:** P7 (User agency) & P6 (Durability) — Every learner deserves their own private, isolated university. Multi-user hosting requires rock-solid data partitioning and authenticated access.
+
+**Steps:**
+1. **Dual-DB Connection Layer & Alembic**: Implement `app/db.py` to support `DATABASE_URL` pointing to PostgreSQL with connection pooling (`psycopg` / `asyncpg` / SQLAlchemy Core) while keeping SQLite fallback (`data/university.db`) for local dev/testing. Initialize Alembic for schema migrations.
+2. **Multi-Tenant Schema Migration**: Update `users` table (`email`, `password_hash`, `name`, `encrypted_ai_key`, `ai_quota_used`, `created_at`). Ensure all tables (`course_groups`, `courses`, `topics`, `advisor_interviews`, `sources`, `tutor_sessions`, `tutor_turns`, `editor_reviews`, `roommate_prompts`, `activity_log`, `_dash_visits`) strictly carry `user_id` foreign keys with indexes.
+3. **Authentication & Session Module (`app/auth/`)**: Password hashing using Argon2id (`argon2-cffi`), secure signed session cookies (`itsdangerous` / signed HttpOnly cookies), and user model helpers.
+4. **Auth Routes & UI**: `GET`/`POST` `/register`, `/login`, `/logout`, and password change in `/settings`, styled with Reading Room design tokens.
+5. **Data Layer Tenant Isolation**: Refactor all store queries (`course_store.py`, `group_store.py`, `course_manage.py`, `advisor.py`, `interview_store.py`, `source_store.py`, `tutor_store.py`, `review_store.py`, `roommate_store.py`, `activity.py`, `dashboard.py`) to mandate `user_id` and enforce `WHERE user_id = :user_id`.
+6. **Route Protection**: FastAPI dependency `get_current_user` injected across all protected routers; unauthenticated requests redirect cleanly to `/login`.
+
+**Constraints:** Zero cross-tenant data leaks. Unauthenticated requests must never access or modify any learning data. SQLite test suite must run clean without requiring a live Postgres instance.
+
+**Definition of Done:** Users can register, log in, log out; User A cannot view, modify, or delete User B's courses or transcripts; regression test suite runs green in SQLite mode with authenticated test fixtures.
+
+---
+
+## Phase 13 — Async Engine, Non-Blocking Fetching & Hybrid/BYOK Quota Management
+
+**Goal:** Convert all LLM operations and outbound source fetching to non-blocking async (`httpx.AsyncClient`) and implement the Hybrid/BYOK (Bring Your Own Key) key and quota management system.
+
+**Why:** P8 (Buildability) & Multi-User Scalability — Synchronous 60-second provider and fetch calls block server worker threads under multi-user load. A sustainable hosted service requires protecting server AI budgets via user keys and controlled free quotas.
+
+**Steps:**
+1. **Async AI Provider**: Refactor `app/ai/provider.py` to use `httpx.AsyncClient` with `async def generate()` and non-blocking retry logic.
+2. **Async Source Fetching**: Convert `app/fetching/http.py`, `extract.py`, and `youtube.py` to async I/O while preserving SSRF validation guards.
+3. **Hybrid/BYOK Crypto & Settings**: Implement AES-GCM encryption helpers (`app/auth/security.py`) to encrypt and decrypt user-provided API keys using `APP_SECRET_KEY`. Add UI in `/settings` allowing users to store their personal OpenAI/OpenRouter key and custom base URL/model.
+4. **Quota Engine (`app/ai/quota.py`)**: Track `ai_quota_used` for users on the server-provided key. If a user exceeds `MAX_FREE_QUOTA` and has not configured a BYOK key, render an informative `QuotaExceeded` message directing them to add their key in Settings.
+5. **Async Route Handlers**: Convert all role routes (`advisor`, `courses`, `librarian`, `tutor`, `editor`, `roommate`) to `async def` and pass the active user context to the quota/key resolver.
+
+**Constraints:** User BYOK keys must never be logged or stored in plain text. Outbound fetches must remain strictly SSRF-guarded. Free quotas must increment atomically.
+
+**Definition of Done:** Multiple concurrent requests run asynchronously without thread blocking; BYOK keys work seamlessly; users without keys can use their free quota and receive a clear prompt to add a key once exhausted.
+
+---
+
+## Phase 14 — Mobile-First PWA & Touch UX (Reading Room App Shell, Bottom Nav & Service Worker)
+
+**Goal:** Transform the frontend into an ergonomic, mobile-first web app installable on iOS and Android as a Progressive Web App (PWA), maintaining the warm paper "Reading Room" aesthetic.
+
+**Why:** P6 (Durability) & P7 (Agency) — Learners study on phones, tablets, and desktops. A mobile-first design makes opening the app daily effortless.
+
+**Steps:**
+1. **Mobile Bottom Navigation**: Implement a mobile-first app shell in `app/templates/base.html` and `style.css`: persistent bottom navigation bar on mobile viewports (`< 768px`) with direct access to Courses, Insights, Groups, and Settings, while retaining the desktop sidebar on larger screens.
+2. **Touch-First Ergonomics**: Update all buttons, cards, and modal triggers to meet touch guidelines (minimum 48×48px tap targets); bottom-sheet modal for course 3-dots actions (`⋮`) on mobile.
+3. **Keyboard-Aware Socratic Flow**: Auto-scroll tutor and interview question panels into view when mobile software keyboards open.
+4. **PWA Manifest (`app/static/manifest.json`)**: App identity, icons (192px & 512px), theme color (`--bg-paper`), background color, `display: standalone`.
+5. **Service Worker (`app/static/sw.js`)**: Cache-first strategy for static assets (fonts, `style.css`, `htmx.min.js`, icons) for instant cold boots on mobile.
+
+**Constraints:** No heavy SPA framework (no React/Next.js); keep server-rendered Jinja2 + HTMX architecture intact. Offline fallback renders a clean "Reading Room offline" note.
+
+**Definition of Done:** Passes Lighthouse PWA criteria; installable to home screen on iOS and Android; navigation is natural and responsive on mobile viewports; full desktop layout remains intact.
+
+---
+
+## Phase 15 — Decoupled Background Scheduler, Proactive Roommate & Web Push
+
+**Goal:** Decouple Roommate due-checks from synchronous web requests into a background scheduler and deliver cross-domain prompts and streak nudges via Web Push notifications.
+
+**Why:** P5 (Range is deliberately engineered) — Serendipitous connections and study streaks should reach the learner where they are, rather than only appearing when they manually open the dashboard.
+
+**Steps:**
+1. **Background Scheduler (`app/scheduler/`)**: In-process async background scheduler (APScheduler / FastAPI lifespan worker) running periodic checks across all users' active courses.
+2. **Decoupled Roommate Generation**: Evaluate course cadence independently of page visits; generate and journal cross-domain prompts asynchronously.
+3. **Web Push Notification Infrastructure**: Support VAPID keys, service worker push event listeners, and user push subscription management in `/settings`.
+4. **Proactive Study Nudges**: Dispatch push notifications for newly generated Roommate insights and streak milestone reminders.
+
+**Constraints:** Zero notification spam. Notifications must be opt-in from `/settings` and easily disabled. Generation failures for one user must never affect other users.
+
+**Definition of Done:** Roommate insights generate on schedule without manual page loads; web push notifications can be subscribed to and received on mobile.
+
+---
+
+## Phase 16 — User Data Export, GDPR Account Lifecycle & Production Hardening
+
+**Goal:** Honor user data sovereignty with one-click data exports, complete self-serve account deletion, and production containerization for secure web hosting.
+
+**Why:** P6 (Durability) & P7 (Agency) — Users own their learning transcripts. In a hosted environment, they must be able to take all their data with them or erase it completely.
+
+**Steps:**
+1. **Full Data Export (`GET /settings/export`)**: Generate a clean downloadable ZIP archive containing the user's entire learning history: courses, interview transcripts, shelf sources, tutor transcripts, gap notes, and editor reviews in both JSON and Markdown formats.
+2. **Account Deletion (`POST /settings/account/delete`)**: Atomic cascading deletion across all 11 tables for that user, purging encrypted keys and active sessions.
+3. **Production Containerization**: Multi-stage `Dockerfile` and `docker-compose.yml` orchestrating the FastAPI application, PostgreSQL database, and Caddy reverse proxy with automatic HTTPS and HTTP/2.
+4. **Security & Rate Limiting**: Integration of `slowapi` rate limiting on authentication and LLM endpoints; security headers (HSTS, CSP, X-Frame-Options, secure cookies).
+
+**Constraints:** Zero orphaned data on deletion. Export must produce standard, readable Markdown files that the user can read in Obsidian, Notion, or any text editor.
+
+**Definition of Done:** User can export and download their entire learning archive; account deletion is verified to wipe all user rows from the database; Docker containers build and launch successfully.
+
+---
+
+## Beyond Phase 16
+
+Future capabilities (multi-topic Roommate cross-linking depth, spaced-repetition on gap notes, course export to EPUB/PDF, exam simulation) can be scheduled once the multi-tenant web platform is live and verified.

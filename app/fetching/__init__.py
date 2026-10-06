@@ -10,6 +10,8 @@ type — HTML page, PDF, or YouTube transcript — and ALWAYS returns a
 structured result: an unreadable source is a normal, visible outcome
 (Task 7 outcome 3), never an exception.
 """
+import asyncio
+import threading
 from dataclasses import dataclass
 
 from app.fetching import extract, http, youtube
@@ -33,12 +35,46 @@ def _looks_like_pdf(url: str, content_type: str) -> bool:
     return url.lower().split("?")[0].split("#")[0].endswith(".pdf")
 
 
-def fetch_source_text(url: str) -> FetchedSource:
-    """Read one source URL → truncated text, or a structured unavailable.
+async def fetch_source_text_async(url: str) -> FetchedSource:
+    """Async source-text fetcher for phase 13 non-blocking operations."""
+    url = (url or "").strip()
+    if not url:
+        return FetchedSource(ok=False, kind="", text="",
+                             reason="this source has no URL to read")
+    if youtube.youtube_video_id(url):
+        transcript = await youtube.fetch_transcript_async(url)
+        if not transcript.ok:
+            return FetchedSource(ok=False, kind="", text="",
+                                 reason=transcript.reason)
+        return FetchedSource(ok=True, kind="transcript",
+                             text=extract.truncate(transcript.text), reason="")
+    try:
+        page = await http.fetch_url_async(url)
+    except FetchError as exc:
+        return FetchedSource(ok=False, kind="", text="", reason=str(exc))
+    if _looks_like_pdf(url, page.content_type):
+        try:
+            text = extract.pdf_to_text(page.body)
+        except Exception as exc:
+            return FetchedSource(
+                ok=False, kind="", text="",
+                reason="could not read that PDF: " + str(exc))
+        kind = "pdf"
+    else:
+        text = extract.html_to_text(page.body.decode("utf-8", "replace"))
+        kind = "page"
+    text = extract.truncate(text)
+    if not text.strip():
+        return FetchedSource(ok=False, kind="", text="",
+                             reason="no readable text was found at that URL")
+    return FetchedSource(ok=True, kind=kind, text=text, reason="")
 
-    Never raises: SSRF refusals, HTTP errors, unreadable PDFs, and
-    missing transcripts all come back as ok=False with a reason the
-    route shows the user verbatim.
+
+def fetch_source_text(url: str) -> FetchedSource:
+    """Sync compatibility wrapper for legacy callers and tests.
+
+    Keep a simple, direct behavior for non-async callers while route handlers
+    use the async version to keep request flow responsive.
     """
     url = (url or "").strip()
     if not url:
@@ -59,9 +95,8 @@ def fetch_source_text(url: str) -> FetchedSource:
         try:
             text = extract.pdf_to_text(page.body)
         except Exception as exc:
-            return FetchedSource(
-                ok=False, kind="", text="",
-                reason="could not read that PDF: " + str(exc))
+            return FetchedSource(ok=False, kind="", text="",
+                                 reason="could not read that PDF: " + str(exc))
         kind = "pdf"
     else:
         text = extract.html_to_text(page.body.decode("utf-8", "replace"))

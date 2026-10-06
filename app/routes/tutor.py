@@ -8,12 +8,13 @@ saved work with the session still open.
 """
 from pathlib import Path
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from app.ai.provider import ProviderError, get_provider
+from app.auth.dependencies import get_current_user
 from app.roles import tutor
 from app.roles.course_manage import get_topic
 from app.roles.review_store import list_reviews_for_topic
@@ -37,10 +38,10 @@ router = APIRouter()
 SHELF_CHAR_CAP = 800
 
 
-def _shelf_lines(topic_id: int) -> str:
+def _shelf_lines(topic_id: int, user_id: int) -> str:
     """Keep-only shelf as short 'label — reason' lines for the prompt."""
     lines = []
-    for src in list_sources(topic_id, keep_only=True):
+    for src in list_sources(topic_id, user_id, keep_only=True):
         lines.append(src["label"] + " — " + (src["reason"] or ""))
     return ("\n".join(lines))[:SHELF_CHAR_CAP]
 
@@ -59,52 +60,63 @@ def _render_session(request: Request, session: dict, error: str = ""):
     )
 
 
-def _topic_error(request: Request, topic: dict, topic_id: int, msg: str):
-    sessions = list_sessions_for_topic(topic_id)
+def _topic_error(request: Request, topic: dict, topic_id: int, user_id: int,
+                 msg: str):
+    sessions = list_sessions_for_topic(topic_id, user_id)
     return templates.TemplateResponse(
         request, "topic.html",
-        {"topic": topic, "sources": list_sources(topic_id),
+        {"topic": topic, "sources": list_sources(topic_id, user_id),
          "shelf_only": False, "error": msg,
          "sessions": sessions,
          "open_session_id": None,
-         "reviews": list_reviews_for_topic(topic_id),
+         "reviews": list_reviews_for_topic(topic_id, user_id),
          "submission_draft": ""},
     )
 
+def _provider_for_user(user: dict):
+    """Support legacy tests that monkeypatch get_provider() without a user kwarg."""
+    try:
+        return get_provider(user=user)
+    except TypeError:
+        return get_provider()
+
+
 @router.post("/topics/{topic_id}/tutor/start")
-def tutor_start(topic_id: int, request: Request):
-    topic = get_topic(topic_id)
+async def tutor_start(topic_id: int, request: Request,
+                     user: dict = Depends(get_current_user)):
+    topic = get_topic(topic_id, user["id"])
     if topic is None:
         return templates.TemplateResponse(
             request, "error.html",
             {"message": "Topic not found. It may have been deleted."},
             status_code=404,
         )
-    existing = find_open_session(topic_id)
+    existing = find_open_session(topic_id, user["id"])
     if existing is not None:
         return RedirectResponse(f"/tutor/{existing}", status_code=303)
-    session_id = start_session(topic_id)
+    session_id = start_session(topic_id, user["id"])
     try:
-        first = tutor.next_question(
+        first = await tutor.next_question_async(
             topic["title"], topic["milestone_description"] or "",
-            _shelf_lines(topic_id), [], get_provider())
+            _shelf_lines(topic_id, user["id"]), [], _provider_for_user(user))
     except ProviderError as exc:
-        delete_session(session_id)
-        return _topic_error(request, topic, topic_id,
+        delete_session(session_id, user["id"])
+        return _topic_error(request, topic, topic_id, user["id"],
                             "Could not start the session: " + str(exc))
     except Exception as exc:
-        delete_session(session_id)
+        delete_session(session_id, user["id"])
         return _topic_error(
-            request, topic, topic_id,
+            request, topic, topic_id, user["id"],
             "The first question came back in a bad shape ("
             + str(exc) + "). Please try again.")
-    add_turn(session_id, first.question)
+    add_turn(session_id, first.question, user["id"])
     return RedirectResponse(f"/tutor/{session_id}", status_code=303)
 
 
 @router.get("/tutor/{session_id}", response_class=HTMLResponse)
-def tutor_view(request: Request, session_id: int):
-    session = get_session(session_id)
+async def tutor_view(request: Request, session_id: int,
+                    user: dict = Depends(get_current_user)):
+    session = get_session(session_id, user["id"])
     if session is None:
         return templates.TemplateResponse(
             request, "error.html",
@@ -114,9 +126,10 @@ def tutor_view(request: Request, session_id: int):
 
 
 @router.post("/tutor/{session_id}/answer")
-def tutor_answer(request: Request, session_id: int,
-                 turn_id: int = Form(...), answer: str = Form(...)):
-    session = get_session(session_id)
+async def tutor_answer(request: Request, session_id: int,
+                      turn_id: int = Form(...), answer: str = Form(...),
+                      user: dict = Depends(get_current_user)):
+    session = get_session(session_id, user["id"])
     if session is None:
         return templates.TemplateResponse(
             request, "error.html",
@@ -129,18 +142,18 @@ def tutor_answer(request: Request, session_id: int,
             request, session,
             error="Please write an answer before continuing.")
     try:
-        save_answer(turn_id, answer)
+        save_answer(turn_id, answer, user["id"])
     except ValueError:
-        session = get_session(session_id)
+        session = get_session(session_id, user["id"])
         return _render_session(
             request, session, error="That answer could not be saved.")
-    session = get_session(session_id)
-    topic = get_topic(session["topic_id"])
+    session = get_session(session_id, user["id"])
+    topic = get_topic(session["topic_id"], user["id"])
     try:
-        nxt = tutor.next_question(
+        nxt = await tutor.next_question_async(
             topic["title"], topic["milestone_description"] or "",
-            _shelf_lines(session["topic_id"]),
-            session["turns"], get_provider())
+            _shelf_lines(session["topic_id"], user["id"]),
+            session["turns"], _provider_for_user(user))
     except ProviderError as exc:
         return _render_session(
             request, session,
@@ -151,13 +164,14 @@ def tutor_answer(request: Request, session_id: int,
             request, session,
             error="Your answer is saved. The next question came back in a "
                   "bad shape (" + str(exc) + ") — reload to try again.")
-    add_turn(session_id, nxt.question)
+    add_turn(session_id, nxt.question, user["id"])
     return RedirectResponse(f"/tutor/{session_id}", status_code=303)
 
 
 @router.post("/tutor/{session_id}/end")
-def tutor_end(request: Request, session_id: int):
-    session = get_session(session_id)
+async def tutor_end(request: Request, session_id: int,
+                   user: dict = Depends(get_current_user)):
+    session = get_session(session_id, user["id"])
     if session is None:
         return templates.TemplateResponse(
             request, "error.html",
@@ -166,11 +180,11 @@ def tutor_end(request: Request, session_id: int):
     if session["ended_at"] is not None:
         return RedirectResponse(
             f"/topics/{session['topic_id']}", status_code=303)
-    topic = get_topic(session["topic_id"])
+    topic = get_topic(session["topic_id"], user["id"])
     try:
-        gap = tutor.make_gap_note(
+        gap = await tutor.make_gap_note_async(
             topic["title"], topic["milestone_description"] or "",
-            session["turns"], get_provider())
+            session["turns"], _provider_for_user(user))
     except ProviderError as exc:
         return _render_session(
             request, session,
@@ -181,14 +195,15 @@ def tutor_end(request: Request, session_id: int):
             request, session,
             error="The gap note came back in a bad shape (" + str(exc)
                   + ") — the session stays open, try ending again.")
-    end_session(session_id, gap.text)
+    end_session(session_id, gap.text, user["id"])
     return RedirectResponse(f"/topics/{session['topic_id']}", status_code=303)
 
 
 @router.post("/tutor/{session_id}/retry")
-def tutor_retry(request: Request, session_id: int):
+async def tutor_retry(request: Request, session_id: int,
+                     user: dict = Depends(get_current_user)):
     """Re-attempts next question generation if an earlier attempt failed and left pending=None."""
-    session = get_session(session_id)
+    session = get_session(session_id, user["id"])
     if session is None:
         return templates.TemplateResponse(
             request, "error.html",
@@ -196,18 +211,17 @@ def tutor_retry(request: Request, session_id: int):
         )
     if session["ended_at"] is not None:
         return RedirectResponse(f"/tutor/{session_id}", status_code=303)
-    # If there is already an unanswered pending question, just redirect.
     turns = session["turns"]
     for turn in reversed(turns):
         if not turn["user_answer"]:
             return RedirectResponse(f"/tutor/{session_id}", status_code=303)
 
-    topic = get_topic(session["topic_id"])
+    topic = get_topic(session["topic_id"], user["id"])
     try:
-        nxt = tutor.next_question(
+        nxt = await tutor.next_question_async(
             topic["title"], topic["milestone_description"] or "",
-            _shelf_lines(session["topic_id"]),
-            session["turns"], get_provider(),
+            _shelf_lines(session["topic_id"], user["id"]),
+            session["turns"], _provider_for_user(user),
         )
     except ProviderError as exc:
         return _render_session(
@@ -221,6 +235,6 @@ def tutor_retry(request: Request, session_id: int):
             error="The next question came back in a "
                   "bad shape (" + str(exc) + ") — try again.",
         )
-    add_turn(session_id, nxt.question)
+    add_turn(session_id, nxt.question, user["id"])
     return RedirectResponse(f"/tutor/{session_id}", status_code=303)
 

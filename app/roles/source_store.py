@@ -40,13 +40,14 @@ UNVERIFIED_VERDICT = "unverified"
 
 
 def add_source(topic_id: int | None, label: str, reference: str, verdict: str,
-               reason: str, verified_at: str | None = None,
+               reason: str, user_id: int, verified_at: str | None = None,
                course_id: int | None = None) -> int:
     """Insert one source row in exactly one scope and return its id.
 
     Exactly one of topic_id / course_id must be non-null (ValueError
-    otherwise). verified_at is settable for the verification flow; NULL
-    means the source is kept but visibly unverified.
+    otherwise). The scope must belong to `user_id` (ValueError otherwise).
+    verified_at is settable for the verification flow; NULL means the source
+    is kept but visibly unverified.
     """
     if not label or not label.strip():
         raise ValueError("source label is empty")
@@ -61,39 +62,45 @@ def add_source(topic_id: int | None, label: str, reference: str, verdict: str,
     with get_connection() as conn:
         if topic_id is not None:
             topic = conn.execute(
-                "SELECT id, course_id FROM topics WHERE id = ?", (topic_id,)
+                "SELECT id, course_id FROM topics WHERE id = ? AND user_id = ?",
+                (topic_id, user_id),
             ).fetchone()
             if topic is None:
                 raise ValueError("topic not found: " + str(topic_id))
             owner_course_id = topic["course_id"]
         else:
             course = conn.execute(
-                "SELECT id FROM courses WHERE id = ?", (course_id,)
+                "SELECT id FROM courses WHERE id = ? AND user_id = ?",
+                (course_id, user_id),
             ).fetchone()
             if course is None:
                 raise ValueError("course not found: " + str(course_id))
             owner_course_id = course_id
         cursor = conn.execute(
-            "INSERT INTO sources (topic_id, course_id, label, "
+            "INSERT INTO sources (user_id, topic_id, course_id, label, "
             "url_or_reference, verdict, reason, verified_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (topic_id, course_id, label.strip(), (reference or "").strip(),
-             verdict, reason.strip(), verified_at),
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, topic_id, course_id, label.strip(),
+             (reference or "").strip(), verdict, reason.strip(), verified_at),
         )
         source_id = cursor.lastrowid
     log(owner_course_id, "source", source_id, "added")
     return source_id
 
 
-def list_sources(topic_id: int, keep_only: bool = False) -> list[dict]:
+def list_sources(topic_id: int, user_id: int,
+                 keep_only: bool = False) -> list[dict]:
     """All sources for a topic, newest first (skip rows kept, dimmed in UI)."""
-    return _list_where("topic_id = ?", (topic_id,), keep_only)
-
-
-def list_course_sources(course_id: int, keep_only: bool = False) -> list[dict]:
-    """All course-level sources (topic_id IS NULL), newest first."""
-    return _list_where("course_id = ? AND topic_id IS NULL", (course_id,),
+    return _list_where("topic_id = ? AND user_id = ?", (topic_id, user_id),
                        keep_only)
+
+
+def list_course_sources(course_id: int, user_id: int,
+                        keep_only: bool = False) -> list[dict]:
+    """All course-level sources (topic_id IS NULL), newest first."""
+    return _list_where(
+        "course_id = ? AND topic_id IS NULL AND user_id = ?",
+        (course_id, user_id), keep_only)
 
 
 def _list_where(where: str, params: tuple, keep_only: bool) -> list[dict]:
@@ -106,36 +113,42 @@ def _list_where(where: str, params: tuple, keep_only: bool) -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def get_source(source_id: int) -> dict | None:
-    """One source row by id, or None (used by the 'Verify now' action)."""
+def get_source(source_id: int, user_id: int) -> dict | None:
+    """One source row by id, or None (also None for another user's row)."""
     with get_connection() as conn:
         row = conn.execute(
-            f"SELECT {_SOURCE_COLUMNS} FROM sources WHERE id = ?", (source_id,)
+            f"SELECT {_SOURCE_COLUMNS} FROM sources "
+            "WHERE id = ? AND user_id = ?",
+            (source_id, user_id),
         ).fetchone()
     return dict(row) if row is not None else None
 
 
 def mark_verified(source_id: int, verdict: str, reason: str,
-                  verified_at: str) -> bool:
+                  verified_at: str, user_id: int) -> bool:
     """Record a passing verification: verdict + reason + verified_at.
 
-    Returns False when the row is gone. This is the ONLY way a row's
-    verified_at becomes non-NULL for an existing row — the add path sets
-    it at insert time instead.
+    Returns False when the row is gone or owned by another user. This is the
+    ONLY way a row's verified_at becomes non-NULL for an existing row — the
+    add path sets it at insert time instead.
     """
     if verdict not in VERDICTS:
         raise ValueError("unknown verdict: " + verdict)
     with get_connection() as conn:
         cursor = conn.execute(
             "UPDATE sources SET verdict = ?, reason = ?, verified_at = ? "
-            "WHERE id = ?",
-            (verdict, reason.strip(), verified_at, source_id),
+            "WHERE id = ? AND user_id = ?",
+            (verdict, reason.strip(), verified_at, source_id, user_id),
         )
         return cursor.rowcount > 0
 
 
-def delete_source(source_id: int) -> bool:
-    """Drop one source row (Task 7 reject / discard outcomes). False if gone."""
+def delete_source(source_id: int, user_id: int) -> bool:
+    """Drop one source row (Task 7 reject / discard outcomes). False if gone
+    or owned by another user."""
     with get_connection() as conn:
-        cursor = conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
+        cursor = conn.execute(
+            "DELETE FROM sources WHERE id = ? AND user_id = ?",
+            (source_id, user_id),
+        )
         return cursor.rowcount > 0

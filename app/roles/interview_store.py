@@ -11,48 +11,63 @@ from app.roles.advisor import STEPS
 DRAFT_STATUS = "draft"
 
 
-def start_interview(topic: str) -> int:
-    """Create the draft course row. Returns its id (the interview id)."""
+def start_interview(topic: str, user_id: int) -> int:
+    """Create the draft course row for this user. Returns its id (the
+    interview id). The row is owned by `user_id` from the first keystroke."""
     with get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO courses (title, status) VALUES (?, ?)",
-            (topic.strip(), DRAFT_STATUS),
+            "INSERT INTO courses (title, status, user_id) VALUES (?, ?, ?)",
+            (topic.strip(), DRAFT_STATUS, user_id),
         )
         return cursor.lastrowid
 
 
-def get_interview(course_id: int) -> dict | None:
-    """Return {topic, answers} or None if the draft doesn't exist."""
+def get_interview(course_id: int, user_id: int) -> dict | None:
+    """Return {topic, answers} or None if the draft doesn't exist OR is owned
+    by another user (Phase 12)."""
     with get_connection() as conn:
         course = conn.execute(
-            "SELECT id, title FROM courses WHERE id = ?", (course_id,)
+            "SELECT id, title FROM courses WHERE id = ? AND user_id = ?",
+            (course_id, user_id),
         ).fetchone()
         if course is None:
             return None
         rows = conn.execute(
-            "SELECT step, answer FROM advisor_interviews WHERE course_id = ?",
-            (course_id,),
+            "SELECT step, answer FROM advisor_interviews "
+            "WHERE course_id = ? AND user_id = ?",
+            (course_id, user_id),
         ).fetchall()
     return {"topic": course["title"], "answers": {r["step"]: r["answer"] for r in rows}}
 
 
-def save_answer(course_id: int, step: str, question: str, answer: str) -> None:
-    """Insert or overwrite one step's answer (back-button edits re-save)."""
+def save_answer(course_id: int, step: str, question: str, answer: str,
+                user_id: int) -> None:
+    """Insert or overwrite one step's answer (back-button edits re-save).
+    Raises ValueError when the interview is missing or not this user's."""
     if step not in STEPS:
         raise ValueError("unknown interview step: " + step)
     with get_connection() as conn:
+        owner = conn.execute(
+            "SELECT id FROM courses WHERE id = ? AND user_id = ?",
+            (course_id, user_id),
+        ).fetchone()
+        if owner is None:
+            raise ValueError("interview not found")
         existing = conn.execute(
-            "SELECT id FROM advisor_interviews WHERE course_id = ? AND step = ?",
-            (course_id, step),
+            "SELECT id FROM advisor_interviews "
+            "WHERE course_id = ? AND step = ? AND user_id = ?",
+            (course_id, step, user_id),
         ).fetchone()
         if existing is None:
             conn.execute(
                 "INSERT INTO advisor_interviews "
-                "(course_id, question, answer, step) VALUES (?, ?, ?, ?)",
-                (course_id, question, answer.strip(), step),
+                "(course_id, user_id, question, answer, step) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (course_id, user_id, question, answer.strip(), step),
             )
         else:
             conn.execute(
-                "UPDATE advisor_interviews SET question = ?, answer = ? WHERE id = ?",
-                (question, answer.strip(), existing["id"]),
+                "UPDATE advisor_interviews SET question = ?, answer = ? "
+                "WHERE id = ? AND user_id = ?",
+                (question, answer.strip(), existing["id"], user_id),
             )

@@ -28,11 +28,13 @@ def _default_status() -> str:
     return ACTIVE_STATUS
 
 
-def confirm_curriculum(course_id: int, course_title: str, topics: list, answers: dict) -> None:
+def confirm_curriculum(course_id: int, course_title: str, topics: list,
+                       answers: dict, user_id: int) -> None:
     """Turn a draft into an active Course with ordered Topics.
 
     `topics` is a list of dicts: {"title", "milestone_description", "time_box"}.
     Replaces any existing topics (idempotent — safe if /confirm is posted twice).
+    Only the owning user's draft is affected; a mismatch raises ValueError.
     """
     if not course_title or not course_title.strip():
         raise ValueError("course title is empty")
@@ -41,11 +43,17 @@ def confirm_curriculum(course_id: int, course_title: str, topics: list, answers:
 
     course_title = course_title.strip()
     with get_connection() as conn:
+        owner = conn.execute(
+            "SELECT id FROM courses WHERE id = ? AND user_id = ?",
+            (course_id, user_id),
+        ).fetchone()
+        if owner is None:
+            raise ValueError("course not found")
         # Copy the interview answers onto the course record where they belong
         # (destination/baseline/cut_list), then flip draft -> active/paused.
         conn.execute(
             "UPDATE courses SET title = ?, destination = ?, baseline = ?, "
-            "cut_list = ?, status = ? WHERE id = ?",
+            "cut_list = ?, status = ? WHERE id = ? AND user_id = ?",
             (
                 course_title,
                 answers.get("destination"),
@@ -53,17 +61,23 @@ def confirm_curriculum(course_id: int, course_title: str, topics: list, answers:
                 answers.get("cut_list"),
                 _default_status(),
                 course_id,
+                user_id,
             ),
         )
         # Replace topics so re-running /confirm can't duplicate rows.
-        conn.execute("DELETE FROM topics WHERE course_id = ?", (course_id,))
+        conn.execute(
+            "DELETE FROM topics WHERE course_id = ? AND user_id = ?",
+            (course_id, user_id),
+        )
         for index, topic in enumerate(topics):
             conn.execute(
                 "INSERT INTO topics "
-                "(course_id, order_index, title, milestone_description, time_box) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "(course_id, user_id, order_index, title, milestone_description, "
+                " time_box) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     course_id,
+                    user_id,
                     index,
                     topic["title"].strip(),
                     topic["milestone_description"].strip(),
@@ -72,9 +86,11 @@ def confirm_curriculum(course_id: int, course_title: str, topics: list, answers:
             )
 
 
-def get_course(course_id: int) -> dict | None:
+def get_course(course_id: int, user_id: int) -> dict | None:
     """Return {"id", "title", "status", "group_id", "group_title",
-    "topics": [...]} or None.
+    "topics": [...]} or None when the course is missing OR owned by another
+    user (Phase 12 — a foreign id is indistinguishable from a missing one,
+    so cross-tenant access renders a clean 404).
 
     Topics come back already ordered by order_index. Phase 11 adds the
     Course Group membership (id + name) so the course page can show and
@@ -82,23 +98,25 @@ def get_course(course_id: int) -> dict | None:
     """
     with get_connection() as conn:
         course = conn.execute(
-            "SELECT id, title, status, group_id FROM courses WHERE id = ?",
-            (course_id,),
+            "SELECT id, title, status, group_id FROM courses "
+            "WHERE id = ? AND user_id = ?",
+            (course_id, user_id),
         ).fetchone()
         if course is None:
             return None
         group_title = None
         if course["group_id"] is not None:
             group_row = conn.execute(
-                "SELECT name FROM course_groups WHERE id = ?",
-                (course["group_id"],),
+                "SELECT name FROM course_groups WHERE id = ? AND user_id = ?",
+                (course["group_id"], user_id),
             ).fetchone()
             if group_row is not None:
                 group_title = group_row["name"]
         rows = conn.execute(
             "SELECT id, title, milestone_description, time_box, status "
-            "FROM topics WHERE course_id = ? ORDER BY order_index",
-            (course_id,),
+            "FROM topics WHERE course_id = ? AND user_id = ? "
+            "ORDER BY order_index",
+            (course_id, user_id),
         ).fetchall()
     return {
         "id": course["id"],

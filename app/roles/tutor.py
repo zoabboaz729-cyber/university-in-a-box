@@ -14,8 +14,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.ai.provider import ProviderError  # noqa: F401 (re-exported for callers)
-
+from app.ai.provider import ProviderError, call_provider_async  # noqa: F401 (re-exported for callers)
 PARSE_ERRORS = (ValueError, KeyError, TypeError, json.JSONDecodeError)
 
 PROMPT_FILE = Path(__file__).with_name("prompts") / "tutor.md"
@@ -104,6 +103,25 @@ def next_question(topic_title: str, milestone: str, shelf_lines: str,
         return _parse_question(raw)
 
 
+async def next_question_async(topic_title: str, milestone: str, shelf_lines: str,
+                             turns: list, provider) -> NextQuestion:
+    """Async variant for route handlers that should not block on outbound AI calls."""
+    system_prompt = PROMPT_FILE.read_text(encoding="utf-8")
+    user_message = "\n".join([
+        "TASK: ASK",
+        _context_block(topic_title, milestone, shelf_lines),
+        "Transcript so far:",
+        format_transcript(turns) or "(no turns yet — ask the opening question)",
+        "Ask exactly one follow-up question now.",
+    ])
+    raw = await call_provider_async(provider, system_prompt, user_message)
+    try:
+        return _parse_question(raw)
+    except PARSE_ERRORS:
+        raw = await call_provider_async(provider, system_prompt, user_message)
+        return _parse_question(raw)
+
+
 def make_gap_note(topic_title: str, milestone: str, turns: list,
                   provider) -> GapNote:
     """Summarize the session into a 1-3 sentence gap note (retried
@@ -121,4 +139,23 @@ def make_gap_note(topic_title: str, milestone: str, turns: list,
         return _parse_gap(raw)
     except PARSE_ERRORS:
         raw = provider.generate(system_prompt, user_message)
+        return _parse_gap(raw)
+
+
+async def make_gap_note_async(topic_title: str, milestone: str, turns: list,
+                             provider) -> GapNote:
+    """Async gap-note generation for non-blocking tutor routes."""
+    system_prompt = PROMPT_FILE.read_text(encoding="utf-8")
+    user_message = "\n".join([
+        "TASK: GAP",
+        _context_block(topic_title, milestone, ""),
+        "Full transcript:",
+        format_transcript(turns) or "(no answers given)",
+        "Write the gap note now.",
+    ])
+    raw = await call_provider_async(provider, system_prompt, user_message)
+    try:
+        return _parse_gap(raw)
+    except PARSE_ERRORS:
+        raw = await call_provider_async(provider, system_prompt, user_message)
         return _parse_gap(raw)

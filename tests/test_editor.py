@@ -87,13 +87,13 @@ def test_store_roundtrip_and_gate_flag(tmp_path, monkeypatch):
     from app.db import init_db
     init_db()
     topic_id = _seed_topic()
-    assert has_editor_review(topic_id) is False
-    assert list_reviews_for_topic(topic_id) == []
+    assert has_editor_review(topic_id, user_id=1) is False
+    assert list_reviews_for_topic(topic_id, user_id=1) == []
     rid = save_review(topic_id, "Milestone for ET", "My submitted work",
                       Review(strengths="s", biggest_weakness="w",
-                             next_edit="e"))
-    assert has_editor_review(topic_id) is True
-    rows = list_reviews_for_topic(topic_id)
+                             next_edit="e"), user_id=1)
+    assert has_editor_review(topic_id, user_id=1) is True
+    rows = list_reviews_for_topic(topic_id, user_id=1)
     assert len(rows) == 1 and rows[0]["id"] == rid
     assert rows[0]["submitted_text"] == "My submitted work"
     assert rows[0]["milestone_ref"] == "Milestone for ET"
@@ -101,14 +101,15 @@ def test_store_roundtrip_and_gate_flag(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         save_review(9999, "m", "text",
                     Review(strengths="s", biggest_weakness="w",
-                           next_edit="e"))
+                           next_edit="e"), user_id=1)
     with pytest.raises(ValueError):
         save_review(topic_id, "m", "   ",
                     Review(strengths="s", biggest_weakness="w",
-                           next_edit="e"))
+                           next_edit="e"), user_id=1)
     with pytest.raises(ValueError):
         save_review(topic_id, "m", "text",
-                    Review(strengths="s", biggest_weakness="", next_edit="e"))
+                    Review(strengths="s", biggest_weakness="", next_edit="e"),
+                    user_id=1)
 
 
 def test_reviews_survive_restart(tmp_path, monkeypatch):
@@ -118,7 +119,7 @@ def test_reviews_survive_restart(tmp_path, monkeypatch):
     topic_id = _seed_topic()
     save_review(topic_id, "Milestone for ET", "Work text",
                 Review(strengths="s", biggest_weakness="weak point",
-                       next_edit="edit"))
+                       next_edit="edit"), user_id=1)
     import sqlite3
     from app.db import get_db_path
     with sqlite3.connect(get_db_path()) as conn:
@@ -141,13 +142,13 @@ def test_last_review_note_for_course(tmp_path, monkeypatch):
     assert last_review_note_for_course(course_id) is None
     save_review(topic_ids[0], "m", "text",
                 Review(strengths="s", biggest_weakness="the weak bit",
-                       next_edit="the edit"))
+                       next_edit="the edit"), user_id=1)
     note = last_review_note_for_course(course_id)
     assert "the weak bit" in note and "the edit" in note
     # A second topic's newer review wins (newest across the course).
     _, t2 = seed_course("Note Course 2", topics=[("NT2", "not_started")])
     save_review(t2[0], "m", "text",
                 Review(strengths="s", biggest_weakness="newer weakness",
-                       next_edit="newer edit"))
+                       next_edit="newer edit"), user_id=1)
     # Seeding created a NEW course, so query that course for its own note.
     assert "newer weakness" in last_review_note_for_course(course_id + 1)

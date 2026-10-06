@@ -1,9 +1,10 @@
 """Advisor interview: draft review + confirm (appended to the advisor router)."""
-from fastapi import Form
+from fastapi import Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.requests import Request
 
 from app.ai.provider import ProviderError, get_provider
+from app.auth.dependencies import get_current_user
 from app.roles import advisor
 from app.roles.activity import log
 from app.roles.course_store import confirm_curriculum
@@ -11,41 +12,53 @@ from app.roles.interview_store import get_interview
 from app.routes.advisor import not_found, render_step, router, templates
 
 
+def _provider_for_user(user: dict):
+    """Compat wrapper for legacy tests that monkeypatch get_provider() without a user kwarg."""
+    try:
+        return get_provider(user=user)
+    except TypeError:
+        return get_provider()
+
+
 @router.post("/{interview_id}/regenerate")
-def regenerate_draft(request: Request, interview_id: int):
+async def regenerate_draft(request: Request, interview_id: int,
+                          user: dict = Depends(get_current_user)):
     """Regenerate button: re-run the single draft call from saved answers."""
-    interview = get_interview(interview_id)
+    interview = get_interview(interview_id, user["id"])
     if interview is None:
         return not_found(request, "Interview not found.")
     if advisor.next_step(set(interview["answers"])) is not None:
         return RedirectResponse(f"/advisor/{interview_id}", status_code=303)
-    return review_draft(request, interview_id)
+    return await review_draft(request, interview_id, user)
 
 
 @router.get("/{interview_id}/review", response_class=HTMLResponse)
-def review_draft(request: Request, interview_id: int):
-    interview = get_interview(interview_id)
+async def review_draft(request: Request, interview_id: int,
+                       user: dict = Depends(get_current_user)):
+    interview = get_interview(interview_id, user["id"])
     if interview is None:
         return not_found(request, "Interview not found.")
     if advisor.next_step(set(interview["answers"])) is not None:
         return RedirectResponse(f"/advisor/{interview_id}", status_code=303)
     try:
-        draft = advisor.build_draft(
-            interview["topic"], interview["answers"], get_provider()
+        draft = await advisor.build_draft_async(
+            interview["topic"], interview["answers"], _provider_for_user(user)
         )
     except ProviderError as exc:
         # No draft yet — back to the last step with a clear, retryable error.
-        interview = get_interview(interview_id)
+        interview = get_interview(interview_id, user["id"])
         return render_step(
             request, interview_id, advisor.STEPS[-1], interview,
             error="Could not generate the draft: " + str(exc),
+            user_id=user["id"],
         )
     except Exception as exc:
-        interview = get_interview(interview_id)
+        interview = get_interview(interview_id, user["id"])
         return render_step(
             request, interview_id, advisor.STEPS[-1], interview,
             error="The draft came back in a bad shape (" + str(exc) + "). "
                   "Please go back and check your answers, then try again.",
+            user_id=user["id"],
         )
     return templates.TemplateResponse(
         request, "advisor_review.html",
@@ -80,6 +93,7 @@ async def confirm_course(
     request: Request, interview_id: int,
     course_title: str = Form(...),
     title_0: str = Form(""), milestone_0: str = Form(""), timebox_0: str = Form(""),
+    user: dict = Depends(get_current_user),
 ):
     """Save the edited draft as a real Course (Phase 1c), then show it.
 
@@ -87,7 +101,7 @@ async def confirm_course(
     for FastAPI's form handling; remaining topics arrive via request.form()
     (awaited — Request.form() is async in current Starlette).
     """
-    interview = get_interview(interview_id)
+    interview = get_interview(interview_id, user["id"])
     if interview is None:
         return not_found(request, "Interview not found.")
     if advisor.next_step(set(interview["answers"])) is not None:
@@ -129,7 +143,8 @@ async def confirm_course(
         )
 
     confirm_curriculum(
-        interview_id, course_title.strip(), topics, interview["answers"]
+        interview_id, course_title.strip(), topics, interview["answers"],
+        user["id"],
     )
     log(interview_id, "course", interview_id, "confirmed")
     return RedirectResponse(f"/courses/{interview_id}", status_code=303)

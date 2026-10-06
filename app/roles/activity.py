@@ -27,16 +27,22 @@ def log(course_id: int, entity_type: str, entity_id: int, action: str,
         is_user: bool = True) -> None:
     """Append one activity row under its owning Course.
 
-    course_id is the Course this action rolls up into. Pass is_user=False
-    only for system-generated rows (automatic prompts, failed background
-    checks) that must not refresh the activity clock.
+    The row's user_id is copied from the owning Course, so activity is always
+    attributed to the tenant that owns the course (Phase 12). course_id is
+    the Course this action rolls up into. Pass is_user=False only for
+    system-generated rows (automatic prompts, failed background checks) that
+    must not refresh the activity clock.
     """
     with get_connection() as conn:
+        owner = conn.execute(
+            "SELECT user_id FROM courses WHERE id = ?", (course_id,)
+        ).fetchone()
+        user_id = owner["user_id"] if owner is not None else 1
         conn.execute(
             "INSERT INTO activity_log "
-            "(course_id, entity_type, entity_id, action, is_user) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (course_id, entity_type, entity_id, action, int(is_user)),
+            "(user_id, course_id, entity_type, entity_id, action, is_user) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, course_id, entity_type, entity_id, action, int(is_user)),
         )
 
 

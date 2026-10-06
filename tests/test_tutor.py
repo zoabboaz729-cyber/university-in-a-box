@@ -67,22 +67,22 @@ def test_store_roundtrip(tmp_path, monkeypatch):
     from app.db import init_db
     init_db()
     topic_id = _seed_topic()
-    sid = start_session(topic_id)
-    assert find_open_session(topic_id) == sid
-    tid = add_turn(sid, "What is the core idea here?")
-    save_answer(tid, "Something about X")
-    end_session(sid, "Mixes up X and Y. Rework it.")
-    assert find_open_session(topic_id) is None
-    sess = get_session(sid)
+    sid = start_session(topic_id, user_id=1)
+    assert find_open_session(topic_id, user_id=1) == sid
+    tid = add_turn(sid, "What is the core idea here?", user_id=1)
+    save_answer(tid, "Something about X", user_id=1)
+    end_session(sid, "Mixes up X and Y. Rework it.", user_id=1)
+    assert find_open_session(topic_id, user_id=1) is None
+    sess = get_session(sid, user_id=1)
     assert sess["turns"][0]["user_answer"] == "Something about X"
     assert sess["gap_note"].startswith("Mixes up")
-    assert list_sessions_for_topic(topic_id)[0]["turn_count"] == 1
+    assert list_sessions_for_topic(topic_id, user_id=1)[0]["turn_count"] == 1
     with pytest.raises(ValueError):
-        save_answer(tid, "   ")
+        save_answer(tid, "   ", user_id=1)
     with pytest.raises(ValueError):
-        end_session(sid, "  ")
+        end_session(sid, "  ", user_id=1)
     with pytest.raises(ValueError):
-        start_session(9999)
+        start_session(9999, user_id=1)
 
 
 def test_last_gap_for_course(tmp_path, monkeypatch):
@@ -93,7 +93,7 @@ def test_last_gap_for_course(tmp_path, monkeypatch):
     course_id, topic_ids = seed_course("Gap Course",
                                        topics=[("GT", "not_started")])
     assert last_gap_for_course(course_id) is None
-    sid = start_session(topic_ids[0])
-    add_turn(sid, "Q?")
-    end_session(sid, "The gap text.")
+    sid = start_session(topic_ids[0], user_id=1)
+    add_turn(sid, "Q?", user_id=1)
+    end_session(sid, "The gap text.", user_id=1)
     assert last_gap_for_course(course_id) == "The gap text."

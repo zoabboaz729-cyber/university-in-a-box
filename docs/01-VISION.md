@@ -1,9 +1,10 @@
 # 01 — Vision
 
 ## Who this is for
-One user (the project owner), self-hosted, used most days, over months and years, across
-many different topics they decide to learn over time. Not a multi-tenant product, not
-something designed to onboard strangers.
+Originally conceived for a single self-hosted learner, the system is evolving to support
+**many learners** via a **web-hosted, web-and-mobile-first** platform. Each user gets their
+own isolated private university, maintaining the same depth, personal agency, and durable
+memory over months and years.
 
 ## The core loop
 1. User tells the Advisor a topic → gets a personalized, staged curriculum (a **Course**
@@ -63,18 +64,19 @@ it should require the user to remember context the app itself already has.
 - Deliberately low-friction: reading it should take seconds; engaging further is optional.
 
 ## What success looks like at the product level
-- The user opens the app on most days it's relevant, not just once.
+- The user opens the app on most days it's relevant, not just once, whether on their phone or desktop.
 - Courses started are more often finished (or deliberately archived) than abandoned mid-way
   without a trace — the app should make it obvious when something has stalled.
 - The user can point at concrete Tutor gap notes and Editor reviews as evidence of actual
   understanding, not just "I read some stuff."
 - Picking the project back up after a gap (for the user *or* the coding agent) takes minutes,
   not a re-read of everything.
+- Multi-user isolation is rock solid: zero possibility of leaking learning transcripts or API keys between learners.
 
 ## Explicit non-goals (do not build these unless the user asks)
-- Not a multi-user SaaS product, no auth/billing system.
-- Not a course marketplace or content library — the app organizes and tests, it does not
+- Not a public course marketplace or content aggregator — the app organizes and tests, it does not
   supply pre-made courses.
 - Not a general-purpose chatbot — every AI interaction happens through one of the five ALTER
   roles, with its own persisted structure, not a free-form chat box bolted onto everything.
-- Not a mobile app in v1 — a local web app is enough; do not add native mobile scope.
+- Not a bloated native mobile app build pipeline — we use a lightweight, responsive, installable
+  Progressive Web App (PWA) shell preserving our clean Jinja2/HTMX server-rendered stack.

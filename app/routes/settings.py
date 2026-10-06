@@ -1,13 +1,14 @@
-"""Settings page — Phase 7 (completion pass).
+"""Settings page — Phase 7 + Phase 13.
 
 - API key display: masked, read-only. It reads the SAME variable the provider
   actually uses (AI_API_KEY via app/ai/config.load_config), so the page never
   claims a key exists when the app can't call, or shows "(not set)" when it can.
+- BYOK access: users can save their own OpenAI/OpenRouter key, encrypted at
+  rest before it is written to the DB.
 - Roommate cadence: editable, validated (>= 1 day), persisted to .env so it
   survives a restart — not just the current process.
 - Per-Course default: "start new courses paused". Persisted to .env; read by
-  course_store.confirm_curriculum when a Course is confirmed (replaces the old
-  "coming in a future phase" placeholder).
+  course_store.confirm_curriculum when a Course is confirmed.
 """
 import os
 from pathlib import Path
@@ -18,6 +19,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from app.ai.config import load_config
+from app.auth.security import decrypt_api_key, encrypt_api_key
+from app.auth.store import get_user_by_id, update_user_ai_key
 from app.db import get_db_path
 from app.roles import roommate
 from app.roles.roommate_store import last_backup_info
@@ -45,13 +48,19 @@ def _env_bool(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def get_current_settings() -> dict:
-    """Read current settings from the environment (after loading .env once)."""
+def get_current_settings(user: dict | None = None) -> dict:
+    """Read current settings from the environment and the active user."""
     cfg = load_config()
     cadence = int(os.environ.get(
         "ROOMMATE_CADENCE_DAYS", str(roommate.DEFAULT_CADENCE_DAYS)))
+    byok_key = ""
+    if user and user.get("id"):
+        stored = get_user_by_id(user["id"]) or {}
+        byok_key = decrypt_api_key(stored.get("encrypted_ai_key"))
     return {
         "api_key_masked": mask_api_key(cfg.api_key),
+        "byok_masked": mask_api_key(byok_key),
+        "has_byok": bool(byok_key),
         "cadence_days": cadence,
         "new_courses_start_paused": _env_bool("NEW_COURSES_START_PAUSED"),
     }
@@ -89,7 +98,8 @@ def write_env_value(key: str, value: str) -> None:
 
 @router.get("/settings", response_class=HTMLResponse)
 def show_settings(request: Request):
-    settings = get_current_settings()
+    user = getattr(request.state, "user", None)
+    settings = get_current_settings(user)
     return templates.TemplateResponse(
         request,
         "settings.html",
@@ -99,6 +109,7 @@ def show_settings(request: Request):
             "default_cadence": roommate.DEFAULT_CADENCE_DAYS,
             "db_path": str(get_db_path()),
             "backup": last_backup_info(),
+            "user": user,
         },
     )
 
@@ -108,21 +119,30 @@ def update_settings(
     request: Request,
     cadence_days: int = Form(...),
     new_courses_start_paused: str = Form(""),
+    personal_ai_key: str = Form(""),
+    clear_personal_ai_key: str = Form(""),
 ):
     """Update cadence + per-course default; persist both to .env."""
+    user = getattr(request.state, "user", None)
     if cadence_days < 1:
         return templates.TemplateResponse(
             request,
             "settings.html",
             {
-                "settings": get_current_settings(),
+                "settings": get_current_settings(user),
                 "error": "Cadence must be at least 1 day.",
                 "default_cadence": roommate.DEFAULT_CADENCE_DAYS,
                 "db_path": str(get_db_path()),
                 "backup": last_backup_info(),
+                "user": user,
             },
             status_code=400,
         )
+    if user and user.get("id"):
+        if clear_personal_ai_key == "on":
+            update_user_ai_key(user["id"], None)
+        elif personal_ai_key.strip():
+            update_user_ai_key(user["id"], encrypt_api_key(personal_ai_key.strip()))
     paused = "true" if new_courses_start_paused == "on" else "false"
     os.environ["ROOMMATE_CADENCE_DAYS"] = str(cadence_days)
     os.environ["NEW_COURSES_START_PAUSED"] = paused

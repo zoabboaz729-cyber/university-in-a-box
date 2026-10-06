@@ -7,6 +7,7 @@ without hardcoding table names in multiple places.
 
 TABLE_NAMES = [
     "users",
+    "course_groups",
     "courses",
     "topics",
     "advisor_interviews",
@@ -15,5 +16,6 @@ TABLE_NAMES = [
     "tutor_turns",
     "editor_reviews",
     "roommate_prompts",
+    "_dash_visits",
     "activity_log",
 ]
