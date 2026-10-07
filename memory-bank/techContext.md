@@ -21,8 +21,8 @@ uvicorn app.main:app --reload
 
 ## Dependencies
 
-- Current: `fastapi>=0.110`, `uvicorn[standard]>=0.29`, `jinja2>=3.1`, `httpx>=0.27`, `pytest>=8.0`, `python-multipart>=0.0.18`, `youtube-transcript-api>=1.0`, `pypdf>=4.0`.
-- Roadmap (Phases 12–16): `argon2-cffi` (password hashing), `itsdangerous` (session cookie signing), `cryptography` (AES-GCM for BYOK keys), `alembic` + `psycopg[binary]` / `asyncpg` (PostgreSQL production), `slowapi` (rate limiting).
+- Current runtime and test dependencies are declared in `requirements.txt`: `fastapi`, `uvicorn[standard]`, `jinja2`, `httpx`, `python-multipart`, `youtube-transcript-api`, and `pypdf`; authentication uses `argon2-cffi` (password hashing), `itsdangerous` (session cookie signing), and `cryptography` (AES-GCM for BYOK keys). `pytest` is included for tests.
+- Future production items not yet required by the current implementation include `alembic`, `psycopg[binary]` / `asyncpg` for PostgreSQL support, and `slowapi` for rate limiting.
 
 ## Known constraints
 - Multi-tenant data isolation invariant: every query reading/mutating learning data must filter on `user_id = current_user.id`.
