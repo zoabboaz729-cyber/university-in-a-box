@@ -4,11 +4,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#F1EDE4">
   <title>{% block title %}University in a Box{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="icon" href="/static/icons/icon-192.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.svg">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body>
+<div id="network-status" class="network-status" role="status" aria-live="polite">Reading Room offline</div>
 <div class="shell">
   <aside class="sidebar">
     <a class="wordmark" href="/">University in a Box<span class="wordmark-sub">your reading room</span></a>
@@ -26,6 +31,13 @@
       <a class="nav-item{% if request.url.path.startswith('/settings') %} active{% endif %}" href="/settings">
         <span class="nav-dot"></span>Settings
       </a>
+    </nav>
+
+    <nav class="mobile-bottom-nav" aria-label="Primary">
+      <a class="mobile-bottom-nav-item{% if request.url.path == '/' %} active{% endif %}" href="/">Courses</a>
+      <a class="mobile-bottom-nav-item{% if request.url.path.startswith('/roommate') %} active{% endif %}" href="/roommate">Insights</a>
+      <a class="mobile-bottom-nav-item{% if request.url.path.startswith('/groups') %} active{% endif %}" href="/groups">Groups</a>
+      <a class="mobile-bottom-nav-item{% if request.url.path.startswith('/settings') %} active{% endif %}" href="/settings">Settings</a>
     </nav>
 
     <button type="button" id="mobile-courses-btn" class="mobile-courses-btn"
@@ -233,6 +245,53 @@ document.addEventListener('click', function(e) {
     closeAllCourseMenus();
   }
 });
+
+function ensureOfflineNotice() {
+  var status = document.getElementById('network-status');
+  if (!status) return;
+  function show(msg) {
+    status.textContent = msg || 'Reading Room offline';
+    status.classList.add('visible');
+  }
+  function hide() {
+    status.classList.remove('visible');
+  }
+  window.addEventListener('online', function() {
+    show('Reading Room online');
+    setTimeout(hide, 1400);
+  });
+  window.addEventListener('offline', function() {
+    show('Reading Room offline');
+  });
+  if (!navigator.onLine) {
+    show('Reading Room offline');
+  }
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/static/sw.js').catch(function() {});
+  });
+}
+
+function keepMobileKeyboardVisible() {
+  var activeInputs = document.querySelectorAll('textarea, input, select');
+  activeInputs.forEach(function(el) {
+    el.addEventListener('focus', function() {
+      setTimeout(function() {
+        var rect = el.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight * 0.7) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 180);
+    });
+  });
+}
+
+ensureOfflineNotice();
+registerServiceWorker();
+keepMobileKeyboardVisible();
 
 function showVerifying(form) {
   // Reading a source can take ~10s (fetch + one LLM call). Disable the
