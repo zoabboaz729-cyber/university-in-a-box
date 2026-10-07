@@ -34,6 +34,7 @@ from app.routes.settings import router as settings_router
 from app.routes.settings import templates as settings_templates
 from app.routes.tutor import router as tutor_router
 from app.routes.tutor import templates as tutor_templates
+from app.scheduler import start_scheduler, stop_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -44,7 +45,11 @@ async def lifespan(api: FastAPI):
     init_db()
     # data/app.log receives failed-LLM / unhandled errors (docs/06-MONITORING).
     setup_logging()
-    yield
+    await start_scheduler()
+    try:
+        yield
+    finally:
+        await stop_scheduler()
 
 
 api = FastAPI(title="University in a Box", lifespan=lifespan)

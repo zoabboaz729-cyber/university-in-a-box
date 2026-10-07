@@ -1,4 +1,4 @@
-"""Settings page — Phase 7 + Phase 13.
+"""Settings page — Phase 7 + Phase 13 + Phase 15.
 
 - API key display: masked, read-only. It reads the SAME variable the provider
   actually uses (AI_API_KEY via app/ai/config.load_config), so the page never
@@ -9,6 +9,8 @@
   survives a restart — not just the current process.
 - Per-Course default: "start new courses paused". Persisted to .env; read by
   course_store.confirm_curriculum when a Course is confirmed.
+- Web push subscriptions: opt-in from the Settings page with VAPID public key
+  support, subject to the user being signed in.
 """
 import os
 from pathlib import Path
@@ -24,6 +26,12 @@ from app.auth.store import get_user_by_id, update_user_ai_key
 from app.db import get_db_path
 from app.roles import roommate
 from app.roles.roommate_store import last_backup_info
+from app.scheduler.notifications import (
+    get_vapid_public_key,
+    has_push_subscription,
+    save_push_subscription,
+    delete_push_subscription,
+)
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -110,6 +118,8 @@ def show_settings(request: Request):
             "db_path": str(get_db_path()),
             "backup": last_backup_info(),
             "user": user,
+            "vapid_public_key": get_vapid_public_key(),
+            "push_enabled": bool(user and has_push_subscription(user["id"])),
         },
     )
 
@@ -121,6 +131,11 @@ def update_settings(
     new_courses_start_paused: str = Form(""),
     personal_ai_key: str = Form(""),
     clear_personal_ai_key: str = Form(""),
+    push_enabled: str = Form(""),
+    push_endpoint: str = Form(""),
+    push_p256dh: str = Form(""),
+    push_auth: str = Form(""),
+    clear_push_subscription: str = Form(""),
 ):
     """Update cadence + per-course default; persist both to .env."""
     user = getattr(request.state, "user", None)
@@ -135,6 +150,8 @@ def update_settings(
                 "db_path": str(get_db_path()),
                 "backup": last_backup_info(),
                 "user": user,
+                "vapid_public_key": get_vapid_public_key(),
+                "push_enabled": bool(user and has_push_subscription(user["id"])),
             },
             status_code=400,
         )
@@ -143,6 +160,16 @@ def update_settings(
             update_user_ai_key(user["id"], None)
         elif personal_ai_key.strip():
             update_user_ai_key(user["id"], encrypt_api_key(personal_ai_key.strip()))
+        if clear_push_subscription == "on" or push_enabled != "on":
+            delete_push_subscription(user["id"])
+        elif push_endpoint.strip() and push_p256dh.strip() and push_auth.strip():
+            save_push_subscription(
+                user["id"],
+                push_endpoint.strip(),
+                push_p256dh.strip(),
+                push_auth.strip(),
+                True,
+            )
     paused = "true" if new_courses_start_paused == "on" else "false"
     os.environ["ROOMMATE_CADENCE_DAYS"] = str(cadence_days)
     os.environ["NEW_COURSES_START_PAUSED"] = paused

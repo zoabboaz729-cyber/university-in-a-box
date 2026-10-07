@@ -172,6 +172,30 @@ def test_new_courses_start_paused_when_set(tmp_path, monkeypatch):
     assert _course_status(course_id) == "paused"
 
 
+def test_web_push_subscription_persists_for_user(tmp_path, monkeypatch):
+    from app.scheduler import notifications as notif
+
+    make_client(tmp_path, monkeypatch)
+    assert notif.save_push_subscription(
+        1,
+        "https://example.test/push/abc",
+        "p256dh-key",
+        "auth-key",
+        True,
+    ) is True
+    assert notif.has_push_subscription(1) is True
+    rows = notif.list_push_subscriptions(1)
+    assert rows[0]["endpoint"] == "https://example.test/push/abc"
+
+
+def test_web_push_dedupe_blocks_duplicate_events(tmp_path, monkeypatch):
+    from app.scheduler import notifications as notif
+
+    make_client(tmp_path, monkeypatch)
+    assert notif.record_push_event(1, "notification", "roommate:abc") is True
+    assert notif.record_push_event(1, "notification", "roommate:abc") is False
+
+
 def test_write_env_value_preserves_other_lines(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text(

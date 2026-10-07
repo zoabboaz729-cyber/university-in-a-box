@@ -45,6 +45,28 @@
   </div>
 
   <div class="settings-section">
+    <h2>Web Push</h2>
+    <p>Opt in to browser notifications for new Roommate insights and study streak nudges.</p>
+    <div class="form-group" style="max-width:420px;margin-top:0.75rem">
+      <label for="push-toggle">Enable mobile/web notifications</label>
+      <div class="checkbox-row">
+        <input type="checkbox" id="push-toggle" name="push_enabled" {% if push_enabled %}checked{% endif %}>
+        <span>Allow notifications on this device</span>
+      </div>
+      <input type="hidden" id="push_endpoint" name="push_endpoint" value="">
+      <input type="hidden" id="push_p256dh" name="push_p256dh" value="">
+      <input type="hidden" id="push_auth" name="push_auth" value="">
+      <input type="hidden" id="clear_push_subscription" name="clear_push_subscription" value="">
+    </div>
+    <p class="form-hint">
+      Browser notifications are off by default. When enabled, a unique subscription is stored only for the signed-in user.
+      {% if vapid_public_key %}
+      <br><strong>VAPID public key:</strong> <code>{{ vapid_public_key }}</code>
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="settings-section">
     <h2>Roommate Cadence</h2>
     <p>How often should the Roommate generate a cross-domain prompt for each active course?</p>
     <div class="form-group" style="max-width:320px;margin-top:0.75rem">

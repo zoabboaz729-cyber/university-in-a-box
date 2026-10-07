@@ -118,6 +118,32 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "ON activity_log(course_id)"
     )
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS push_subscriptions ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "user_id INTEGER NOT NULL REFERENCES users(id), "
+        "endpoint TEXT NOT NULL UNIQUE, "
+        "p256dh TEXT NOT NULL, "
+        "auth TEXT NOT NULL, "
+        "enabled INTEGER NOT NULL DEFAULT 1, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now'))"
+        ")"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user "
+        "ON push_subscriptions(user_id)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS push_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "user_id INTEGER NOT NULL REFERENCES users(id), "
+        "event_type TEXT NOT NULL, "
+        "event_key TEXT NOT NULL, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+        "UNIQUE(user_id, event_type, event_key)"
+        ")"
+    )
+
     # ---- Phase 11: Course Groups / Semesters ----
     # The course_groups TABLE itself is created by schema.sql on every boot
     # (CREATE IF NOT EXISTS); only column evolution on pre-existing tables

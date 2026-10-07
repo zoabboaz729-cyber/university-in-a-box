@@ -400,6 +400,8 @@ is recorded in `memory-bank/progress.md`; the work is committed.
 
 **Definition of Done:** Roommate insights generate on schedule without manual page loads; web push notifications can be subscribed to and received on mobile.
 
+**Status (verified 2026-10-07):** The scheduler is started from FastAPI lifespan and stopped cleanly on shutdown; the app keeps the Roommate due-check out of request-time flow; `/settings` now exposes a push opt-in switch and stores the browser subscription only when the user is signed in; the service worker handles incoming push and notification click events. Repo-wide verification passes: `python -m pytest -q` → **212 passed, 2 warnings**.
+
 ---
 
 ## Phase 16 — User Data Export, GDPR Account Lifecycle & Production Hardening
