@@ -273,6 +273,31 @@ def _migrate(conn: sqlite3.Connection) -> None:
             f"CREATE INDEX IF NOT EXISTS idx_{table}_user ON {table}(user_id)"
         )
 
+    # Dashboard hot-path indexes (perf pass 2026-10-07). Before these,
+    # EXPLAIN showed SQLite building an AUTOMATIC (temporary) index on
+    # topics(course_id) for every per-course topics query, a temp sort via
+    # idx_topics_user, and full scans of tutor_sessions / editor_reviews /
+    # roommate_prompts from the per-course helpers and the Roommate
+    # due-check. Created HERE (not schema.sql) because _migrate runs on
+    # every boot, so EXISTING databases gain them, not just fresh ones.
+    # IF NOT EXISTS keeps every boot idempotent.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_topics_course_order "
+        "ON topics(course_id, order_index)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tutor_sessions_topic "
+        "ON tutor_sessions(topic_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_editor_reviews_topic "
+        "ON editor_reviews(topic_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_roommate_prompts_course "
+        "ON roommate_prompts(course_id)"
+    )
+
 def init_db() -> Path:
     """Create all tables if they don't exist yet. Safe to call on every boot."""
     path = get_db_path()

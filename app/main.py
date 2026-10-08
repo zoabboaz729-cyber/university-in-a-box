@@ -136,8 +136,24 @@ def _template_user(ctx):
 
 @pass_context
 def _sidebar_groups(ctx):
+    # Per-request memo: base.html renders the course list twice (desktop
+    # sidebar block + mobile nav dialog) and both call sites hit this
+    # wrapper, so without a cache every page render ran sidebar_groups()
+    # (one list_dashboard_courses pass per group + ungrouped) twice for
+    # identical data. Same request → same result, so cache it on
+    # request.state. No TTL, no staleness window beyond one render.
     user = _template_user(ctx)
-    return group_store.sidebar_groups(user["id"]) if user else []
+    if user is None:
+        return []
+    request = ctx.get("request")
+    if request is not None:
+        cached = getattr(request.state, "_sidebar_groups", None)
+        if cached is not None:
+            return cached
+    blocks = group_store.sidebar_groups(user["id"])
+    if request is not None:
+        request.state._sidebar_groups = blocks
+    return blocks
 
 
 @pass_context
