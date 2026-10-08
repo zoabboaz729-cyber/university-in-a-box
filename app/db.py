@@ -243,6 +243,67 @@ def _migrate(conn: sqlite3.Connection) -> None:
                 "INTEGER NOT NULL DEFAULT 1"
             )
 
+    # ---- Legacy NULL-owner backfill ---------------------------------------
+    # courses / course_groups already carried a (nullable) user_id before the
+    # ADD COLUMN loop above, so that loop skips them and pre-release rows can
+    # still be user_id IS NULL (the audit showed courses 7/7, course_groups
+    # 4/4 NULL on the owner's real database). Adopt such rows ONLY when the
+    # instance is unambiguously single-owner: exactly ONE row in users. With
+    # 0 users (nobody to adopt them) or 2+ users (cannot tell which one)
+    # we never guess an owner — the rows stay NULL and a warning is logged
+    # so the operator can fix ownership by hand.
+    # Idempotent: every UPDATE targets only user_id IS NULL, so a second run
+    # changes nothing. A database with no NULL-owner rows (every fresh install)
+    # skips this block entirely, so normal boots stay warning-free.
+    owner_tables = [
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+        if "user_id"
+        in {r[1] for r in conn.execute(f"PRAGMA table_info({row[0]})")}
+    ]
+    pending = {}
+    for table in owner_tables:
+        nulls = conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE user_id IS NULL"
+        ).fetchone()[0]
+        if nulls:
+            pending[table] = nulls
+    if pending:
+        total = sum(pending.values())
+        # A hand-built DB could reach here without a users table at all;
+        # treat that as "nobody to adopt the rows" (same as 0 users).
+        has_users = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'users'"
+        ).fetchone()
+        n_users = (
+            conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            if has_users else 0
+        )
+        if n_users == 1:
+            owner_id = conn.execute("SELECT id FROM users").fetchone()[0]
+            for table in pending:
+                conn.execute(
+                    f"UPDATE {table} SET user_id = ? WHERE user_id IS NULL",
+                    (owner_id,),
+                )
+        else:
+            # Lazy import: app.monitor imports app.db, so it can only be
+            # pulled in once _migrate is already running.
+            from app.monitor import get_logger
+
+            get_logger().warning(
+                "owner backfill SKIPPED: %d row(s) with user_id IS NULL in %s "
+                "but users has %d rows (need exactly 1 to adopt them). "
+                "Not guessing an owner.",
+                total,
+                ", ".join(sorted(pending)),
+                n_users,
+            )
+
     # _dash_visits moved from one global row (id=1) to one row per user.
     # SQLite cannot re-key a table's PRIMARY KEY, so rebuild it; the single
     # legacy row becomes user_id = 1's row.
