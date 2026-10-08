@@ -28,8 +28,15 @@ def list_dashboard_courses(user_id: int, group_id: int | None = None,
     returns only courses in no group. Both filters are optional and
     combine naturally with the Phase 2 behavior. Phase 12: results are
     always scoped to `user_id`.
+
+    Perf: one connection serves the whole per-course loop. The four
+    per-course helpers (activity/streak/gap/review) receive it so a
+    9-course dashboard opens ONE connection instead of ~37. `with conn:`
+    only commits and does NOT close, so the connection is closed by hand
+    in a finally.
     """
-    with get_connection() as conn:
+    conn = get_connection()
+    try:
         base_sql = ("SELECT id, title, status, created_at, group_id "
                     "FROM courses WHERE status != 'draft' AND user_id = ?")
         params = [user_id]
@@ -69,11 +76,14 @@ def list_dashboard_courses(user_id: int, group_id: int | None = None,
                     "done_topics": done,
                     "current_topic": current,
                     "days_since_activity": days_since(
-                        last_activity_for_course(course_id)
+                        last_activity_for_course(course_id, conn=conn)
                     ),
-                    "streak_days": current_streak(course_id),
-                    "last_gap_note": last_gap_for_course(course_id),
-                    "last_review_note": last_review_note_for_course(course_id),
+                    "streak_days": current_streak(course_id, conn=conn),
+                    "last_gap_note": last_gap_for_course(course_id, conn=conn),
+                    "last_review_note": last_review_note_for_course(
+                        course_id, conn=conn),
                 }
             )
         return result
+    finally:
+        conn.close()

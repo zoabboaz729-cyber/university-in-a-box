@@ -165,9 +165,17 @@ def end_session(session_id: int, gap_note: str, user_id: int) -> None:
     log(course_id, "tutor_session", session_id, "ended")
 
 
-def last_gap_for_course(course_id: int) -> str | None:
-    """Most recent non-empty gap note across a course's topics."""
-    with get_connection() as conn:
+def last_gap_for_course(course_id: int, conn=None) -> str | None:
+    """Most recent non-empty gap note across a course's topics.
+
+    `conn` lets a caller share one open connection across a per-course
+    loop; when given it is used as-is and never closed or committed here;
+    when omitted, this opens and closes its own connection as before.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
         row = conn.execute(
             "SELECT gap_note FROM tutor_sessions WHERE gap_note IS NOT NULL "
             "AND gap_note != '' AND topic_id IN "
@@ -176,3 +184,6 @@ def last_gap_for_course(course_id: int) -> str | None:
             (course_id,),
         ).fetchone()
         return row["gap_note"] if row else None
+    finally:
+        if own:
+            conn.close()

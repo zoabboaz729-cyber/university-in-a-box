@@ -67,9 +67,17 @@ def has_editor_review(topic_id: int, user_id: int) -> bool:
         return row is not None
 
 
-def last_review_note_for_course(course_id: int) -> str | None:
-    """Newest review across a course's topics as one short dashboard line."""
-    with get_connection() as conn:
+def last_review_note_for_course(course_id: int, conn=None) -> str | None:
+    """Newest review across a course's topics as one short dashboard line.
+
+    `conn` lets a caller share one open connection across a per-course
+    loop; when given it is used as-is and never closed or committed here;
+    when omitted, this opens and closes its own connection as before.
+    """
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
         row = conn.execute(
             "SELECT biggest_weakness, next_edit FROM editor_reviews "
             "WHERE topic_id IN (SELECT id FROM topics WHERE course_id = ?) "
@@ -80,3 +88,6 @@ def last_review_note_for_course(course_id: int) -> str | None:
             return None
         return ("Biggest weakness: " + row["biggest_weakness"]
                 + " Next edit: " + row["next_edit"])
+    finally:
+        if own:
+            conn.close()

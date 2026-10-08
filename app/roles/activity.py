@@ -46,15 +46,24 @@ def log(course_id: int, entity_type: str, entity_id: int, action: str,
         )
 
 
-def last_activity_for_course(course_id: int) -> str | None:
+def last_activity_for_course(course_id: int, conn=None) -> str | None:
     """Newest USER activity timestamp for a course (any of its rows).
 
     Returns the raw created_at string (SQLite datetime('now')) or None
     when nothing has been logged yet (e.g. pre-Phase-2 courses). Falls
     back to the course's created_at when there is no log row — the
     caller decides the fallback.
+
+    `conn` lets a caller (e.g. list_dashboard_courses) share one open
+    connection across a per-course loop; the courses.created_at fallback
+    below runs on that same connection. When `conn` is given it is used
+    as-is and never closed or committed here; when omitted, this opens
+    and closes its own connection exactly as before.
     """
-    with get_connection() as conn:
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
         row = conn.execute(
             "SELECT MAX(created_at) AS last_seen FROM activity_log "
             "WHERE course_id = ? AND is_user = 1",
@@ -68,6 +77,9 @@ def last_activity_for_course(course_id: int) -> str | None:
                 return None
             return course["created_at"]
         return row["last_seen"]
+    finally:
+        if own:
+            conn.close()
 
 
 def days_since(stamp: str | None) -> int | None:
@@ -91,13 +103,20 @@ def days_since(stamp: str | None) -> int | None:
     return max(0, delta.days)
 
 
-def current_streak(course_id: int) -> int:
+def current_streak(course_id: int, conn=None) -> int:
     """Consecutive days of user activity ending today, or 0 if no activity.
     
     A "day" with activity has at least one row where course_id matches and
     is_user = 1. Gaps break the streak.
+
+    `conn` lets a caller share one open connection across a per-course
+    loop; when given it is used as-is and never closed or committed here;
+    when omitted, this opens and closes its own connection as before.
     """
-    with get_connection() as conn:
+    own = conn is None
+    if own:
+        conn = get_connection()
+    try:
         # Get all distinct activity dates for this course, newest first.
         rows = conn.execute(
             "SELECT DISTINCT DATE(created_at) AS activity_date "
@@ -105,6 +124,9 @@ def current_streak(course_id: int) -> int:
             "ORDER BY activity_date DESC",
             (course_id,),
         ).fetchall()
+    finally:
+        if own:
+            conn.close()
     
     if not rows:
         return 0
