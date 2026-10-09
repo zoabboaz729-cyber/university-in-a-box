@@ -4,6 +4,30 @@
 changes. Newest at the top. These are defaults set during planning; they're changeable, not
 commandments — but changing one should get its own entry explaining why.*
 
+### D-033 — Legacy NULL-owner rows in `courses` / `course_groups` are adopted only when the instance has exactly one user
+**Date:** 2026-10-08 (committed to `master` as `13ba056`; applied to the real database the same day)
+**Context:** The Phase 12 `ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1` loop only touches tables that *lack* a `user_id` column. `courses` and `course_groups` already carried a nullable `user_id` from earlier phases, so the loop skipped them and their pre-release rows stayed `user_id IS NULL` — invisible to every user-scoped query ((the owner's dashboard showed none of the 7 courses; 6 appear after the backfill because the 7th is a draft)). An audit of the real database found exactly those two tables NULL-owned (`courses` 7/7, `course_groups` 4/4), with `users` holding exactly one row.
+**Decision:** In `app/db.py::_migrate`, adopt `user_id IS NULL` rows ONLY when `users` has exactly one row (a missing `users` table counts as 0). With 0 or 2+ users, leave the rows NULL and log `owner backfill SKIPPED: N row(s) … users has K rows … Not guessing an owner.` via the `uib` logger rather than guessing an owner. Every UPDATE targets only `IS NULL` rows, so it is idempotent and silent on NULL-free databases (no warning spam on fresh installs).
+**Consequences:** Existing databases become visible to their single owner on the next boot; a genuine multi-user instance is never silently rewired. **Applied to the real `data/university.db` on 2026-10-08**, with the backup kept at `data/university.db.backup-before-owner-backfill`; a read-only re-audit confirms 0 NULL rows in both tables. Guarded by `tests/test_owner_backfill.py` (one user adopts; two or zero users warn and change nothing; a second run is a silent no-op; an explicit owner is never reassigned).
+
+---
+
+### D-032 — Dashboard perf pass, step 2: share one connection across the per-course dashboard helpers
+**Date:** 2026-10-09 (owner's plan step 2; committed to `master` as `f33ee33`)
+**Context:** D-031's indexes removed the query-plan problem, but `list_dashboard_courses` still opened a fresh SQLite connection inside every per-course helper (`last_activity_for_course`, `current_streak`, `last_gap_for_course`, `last_review_note_for_course`) — measured 25 connections per call on the owner's real data and 121 on the seeded dataset. Statement counts were already flat (31 real / 151 seeded), so only connection churn was worth removing.
+**Decision:** Give those four helpers an optional `conn=None` parameter (they open their own connection only when it is None, so every existing caller and test is unchanged), and have `list_dashboard_courses` open ONE connection, pass it to every helper, and close it by hand in a `finally` — `with conn:` only commits, it does not close. No SQL was rewritten and no return value changed.
+**Consequences:** Dashboard connections drop **25→1 (real data)** and **121→1 (seeded)** with statement counts unchanged. Guarded by `tests/test_connection_reuse.py` (shared-conn output identical to the `conn=None` path, connection count flat as course count grows, connection closed on both success and a raising helper). Deliberately left alone, and recorded as deferred: the scheduler's `_streak_nudge` (a connection per course), the Roommate background thread (many connections), `librarian._fetch_source_text` calling the sync fetch inside an `async def` route (loop-freeze risk — investigate why its `TypeError` fallback exists first), and sync SQLite inside `async def` routes (judged negligible).
+
+---
+
+### D-031 — Dashboard perf pass, step 1: per-request sidebar memo + four indexes (defer the rest)
+**Date:** 2026-10-07 (owner's plan; committed to `master` as `44b0d2e`)
+**Context:** A rendered dashboard measured ~767 queries / ~616 connections per request (seeded 30 courses): `base.html` calls `sidebar_groups()` twice per render, and `EXPLAIN` showed SQLite building a temporary AUTOMATIC index on `topics(course_id)` plus full scans of `tutor_sessions`, `editor_reviews`, and `roommate_prompts` on every per-course helper call.
+**Decision:** Do only the low-risk, result-preserving fixes now: (1) memoize `sidebar_groups()` per request on `request.state`; (2) add `idx_topics_course_order`, `idx_tutor_sessions_topic`, `idx_editor_reviews_topic`, `idx_roommate_prompts_course` in `app/db._migrate()` so existing databases gain them too. Explicitly DEFER: SQL/JOIN rewrite of the group-count subqueries (indexes made it unnecessary), TTL caching, denormalization, pagination, connection-reuse inside `list_dashboard_courses` (later done as D-032), and the async blockers.
+**Consequences:** Dashboard drops to ~605 queries / ~484 connections and the hot `EXPLAIN` plans are all index SEARCHes; rendered HTML is unchanged apart from seed timestamps. The perf instrumentation used to measure this (`app/perf_instrument.py`, `scripts/perf_*.py`, the hook blocks, the temp test) was temporary and **has been removed** — the committed diff is only the memo + the indexes, and `tests/test_perf_fixes.py` is the permanent regression. **Method lesson: measure connection and statement counts, not wall-clock** (wall-clock on this machine swung 1.4s–11.6s for the same page under `uvicorn --reload` churn), run long commands from script files, and give each probe its own run.
+
+---
+
 ### D-030 — Mobile-First PWA with "The Reading Room" Design Tokens & HTMX
 **Date:** 2026-09-30 (Roadmap planning; owner approved)
 **Context:** The owner requested a "web and mobile first" experience. A mobile-native rewrite in React Native or Flutter would discard the clean, model-friendly Jinja2/HTMX templates and create heavy build/pipeline complexity (violating P8).

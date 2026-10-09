@@ -38,6 +38,7 @@ right about current status; fix the disagreement the same session you notice it.
 | 14 — Mobile-First PWA & Touch UX | Done | Verified 2026-10-07: mobile bottom navigation app shell, touch-first ergonomics, `manifest.json`, service worker caching, offline network banner, and keyboard-aware form scrolling are in place; repo-wide verification passed `python -m pytest -q` → **212 passed, 2 warnings in 41.26s**. |
 | 15 — Decoupled Scheduler, Roommate & Web Push | Done | Verified 2026-10-07: async scheduler service starts with FastAPI lifespan, Roommate due-checks run without blocking page loads, and browser push subscriptions are opt-in via `/settings` with VAPID-backed server dispatch. |
 | 16 — Data Export, Account Lifecycle & Hardening | Not started | Documented 2026-09-30. One-click full data export (ZIP of JSON/Markdown), atomic GDPR account deletion, Docker multi-stage build, reverse proxy with HTTPS. |
+| Perf pass — Dashboard steps 1–2 + legacy owner backfill (D-031, D-032, D-033) | Done | Committed to `master` (`44b0d2e`, `13ba056`, `f33ee33`). 2026-10-07/09: per-request `sidebar_groups()` memo on `request.state` in `app/main.py` (`base.html` calls it twice per render) + four `_migrate` indexes — `idx_topics_course_order ON topics(course_id, order_index)`, `idx_tutor_sessions_topic`, `idx_editor_reviews_topic`, `idx_roommate_prompts_course`, added because `EXPLAIN` showed an AUTOMATIC index and full scans; plus connection reuse (`conn=None` on `last_activity_for_course`, `current_streak`, `last_gap_for_course`, `last_review_note_for_course`; `list_dashboard_courses` opens one connection and closes it in `finally`) → dashboard connections **25→1 real / 121→1 seeded**, statement counts unchanged. The legacy NULL-owner backfill in `app/db.py::_migrate` (adopts NULL `user_id` rows in `courses`/`course_groups` only when `users` has exactly one row, else warns and skips) was applied to the real database on 2026-10-08; backup at `data/university.db.backup-before-owner-backfill`. All temporary perf instrumentation has been REMOVED; `tests/test_perf_fixes.py`, `tests/test_owner_backfill.py` and `tests/test_connection_reuse.py` are the permanent regressions. Deferred: scheduler `_streak_nudge` per-course connections, the Roommate background thread's many connections, `librarian._fetch_source_text` sync fetch inside an async route, JOIN rewrite / TTL cache / denormalization / pagination. |
 
 Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
 
@@ -173,11 +174,23 @@ Status values: `Not started` / `In progress` / `Done` / `Blocked (reason)`.
   regressions.
 
 ## What's left
-- **Stage 3 (owner roadmap) is the only open item:** all 7 tasks are implemented, suite-verified
+- **Dashboard perf pass — DONE and COMMITTED (2026-10-07/09, `master` commits `44b0d2e`,
+  `13ba056`, `f33ee33`):** the per-request `sidebar_groups()` memo, the four `_migrate`
+  indexes, the NULL-owner backfill and connection reuse are all shipped. All temporary perf
+  instrumentation has been REMOVED — nothing is pending cleanup. Measurement logs and probe
+  scripts remain, untracked, in `_evidence/`.
+- **Deferred perf items (measured, deliberately left as-is):** scheduler `_streak_nudge`
+  still opens a connection per course; the Roommate background thread in
+  `app/routes/dashboard.py` still opens many connections; `librarian._fetch_source_text`
+  calls the sync fetch inside an `async def` route (loop-freeze risk — find out why its
+  `TypeError` fallback exists before changing it); sync SQLite inside `async def` routes was
+  judged negligible. Owner-deferred by scope: JOIN rewrite of the group-count subqueries,
+  TTL caching, denormalization, pagination.
+- **Stage 3 (owner roadmap) is the only open build item:** all 7 tasks are implemented, suite-verified
   and now documented, but Stage 3 is deliberately NOT marked Done — the owner UI walkthrough and
   the commit are outstanding (see the Stage 3 row above and `activeContext.md`'s Next step).
-  Untracked and not yet committed: `docs/07-FRONTEND-AUDIT.md` and `docs/Frontend-Mockup` (an
-  extension-less HTML mockup file).
+  Untracked and not yet committed: `docs/07-FRONTEND-AUDIT.md`, `docs/Frontend-Mockup` (an
+  extension-less HTML mockup file) and `scripts/db_owner_audit.py`.
 - **Agent-side pre-flight done 2026-09-16** (on a throwaway copy of the real DB, no LLM calls, no
   writes to real data): every Stage 3 UI affordance renders from the owner's actual data — ⋮ menus
   on sidebar/dashboard/mobile (×18 across 3 call sites), mobile `courses-nav-modal`, `Groups` nav
