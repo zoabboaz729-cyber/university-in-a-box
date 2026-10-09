@@ -147,9 +147,24 @@ async def shelf_view(request: Request, topic_id: int,
 
 
 async def _fetch_source_text(url: str):
-    """Call the route's configured fetch seam. Tests patch the sync wrapper; app uses async fetch when needed."""
+    """Read a source's text WITHOUT blocking the event loop.
+
+    The configured fetcher (``fetch_source_text``) is a *blocking* call: a
+    synchronous ``httpx`` client for pages/PDFs, and — for a YouTube URL —
+    ``asyncio.run`` internally (see ``app.fetching.youtube.fetch_transcript``).
+    Calling it directly inside this ``async def`` route would (a) freeze the
+    event loop for the whole HTTP timeout and (b) crash on a YouTube URL,
+    because ``asyncio.run`` cannot start a loop while one is already running
+    (a 500 instead of a clean outcome-3 page). Running it in a worker thread
+    via ``asyncio.to_thread`` keeps the loop responsive and lets that nested
+    ``asyncio.run`` succeed.
+
+    The name is resolved on the module (tests patch
+    ``app.routes.librarian.fetch_source_text``). The ``except TypeError``
+    seam, the coroutine check, and the async fallback below are unchanged.
+    """
     try:
-        result = fetch_source_text(url)
+        result = await asyncio.to_thread(fetch_source_text, url)
     except TypeError:
         result = None
     if result is not None:
