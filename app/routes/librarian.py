@@ -30,6 +30,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from app.ai.provider import ProviderError, get_provider
+from app.ai.quota import QuotaExceeded
 from app.auth.dependencies import get_current_user
 from app.fetching import fetch_source_text, fetch_source_text_async
 
@@ -176,16 +177,33 @@ async def _fetch_source_text(url: str):
     return await _ORIGINAL_FETCH_SOURCE_TEXT_ASYNC(url)
 
 
-def _provider_for_user(user_id: int):
-    """Support both modern user-aware provider calls and older test patches."""
-    user = {"id": user_id}
+def _provider_for_user(user: dict):
+    """Build the provider for THIS user, so BYOK and the quota apply.
+
+    Mirrors the other roles (tutor/editor/advisor): the FULL user row is
+    handed to ``get_provider``, which then resolves the user's own stored
+    key (BYOK) or the server key under the free quota
+    (app/ai/quota.py). An id-only dict would silently skip both.
+
+    The ``except TypeError`` fallback keeps older test patches that
+    replace ``get_provider`` with a no-argument callable working.
+    """
     try:
         return get_provider(user=user)
     except TypeError:
         return get_provider()
 
 
-async def _handle(request: Request, scope: str, scope_id: int, user_id: int,
+def _quota_error(request: Request, exc: QuotaExceeded):
+    """The friendly quota page (docs/05-VERIFICATION.md, item 4).
+
+    Nothing is stored on this path: the quota check happens before any
+    row is written, and an existing row keeps its exact previous state.
+    """
+    return _render_error(request, str(exc) + " Nothing was stored.")
+
+
+async def _handle(request: Request, scope: str, scope_id: int, user: dict,
                   source_id: int | None, label: str, reference: str,
                   decision: str, next_path: str):
     """One source attempt: read → judge → exactly one visible outcome.
@@ -195,8 +213,11 @@ async def _handle(request: Request, scope: str, scope_id: int, user_id: int,
     rendering a page whose three choices post to this same handler.
 
     The provider is built lazily: a discard or a keep-as-unverified needs
-    no AI config and must not fail because of one.
+    no AI config and must not fail because of one. It is built from the
+    FULL user row, so the user's own key (BYOK) and the free quota apply
+    exactly as they do for the Tutor, Editor and Advisor.
     """
+    user_id = user["id"]
     next_path = _safe_next(next_path)
     if not label.strip():
         return _render_scope(request, scope, scope_id, user_id,
@@ -230,7 +251,11 @@ async def _handle(request: Request, scope: str, scope_id: int, user_id: int,
         return _render_error(request, "That page no longer exists.")
     try:
         verification = await librarian.verify_async(
-            descriptor, label, reference, fetched.text, _provider_for_user(user_id))
+            descriptor, label, reference, fetched.text, _provider_for_user(user))
+    except QuotaExceeded as exc:
+        # The free quota is spent and the user has no key of their own.
+        # Show the friendly message — never a 500 (docs/05-VERIFICATION.md).
+        return _quota_error(request, exc)
     except ProviderError as exc:
         return _render_error(request, "Could not judge that source: "
                                       + str(exc) + " Nothing was stored.")
@@ -258,19 +283,24 @@ async def _handle(request: Request, scope: str, scope_id: int, user_id: int,
 
 async def _reverify(request: Request, scope: str, scope_id: int, source_id: int,
                    label: str, reference: str, decision: str, next_path: str,
-                   user_id: int):
+                   user: dict):
     """Re-run read + judge on a row the user already has.
 
     This is how the pre-existing rows (verified_at NULL after migration)
     become verified: per-row, on demand — never a silent bulk re-fetch.
     """
-    row = get_source(source_id, user_id)
+    row = get_source(source_id, user["id"])
     if row is None:
         return _render_error(request, "That source no longer exists.")
-    return await _handle(request, scope, scope_id, user_id, source_id,
-                         (label or row["label"]).strip(),
-                         (reference or row["url_or_reference"] or "").strip(),
-                         decision, next_path)
+    try:
+        return await _handle(request, scope, scope_id, user, source_id,
+                             (label or row["label"]).strip(),
+                             (reference or row["url_or_reference"] or "").strip(),
+                             decision, next_path)
+    except QuotaExceeded as exc:
+        # Safety net for this path: the quota page, never a 500. _handle
+        # catches the same error for the call it makes itself.
+        return _quota_error(request, exc)
 
 
 @router.post("/topics/{topic_id}/sources")
@@ -278,7 +308,7 @@ async def add_topic_source(request: Request, topic_id: int, label: str = Form(..
                           reference: str = Form(""), decision: str = Form(""),
                           next: str = Form(""),
                           user: dict = Depends(get_current_user)):
-    return await _handle(request, "topic", topic_id, user["id"], None,
+    return await _handle(request, "topic", topic_id, user, None,
                          label.strip(), reference.strip(), decision,
                          next or f"/topics/{topic_id}")
 
@@ -288,7 +318,7 @@ async def add_course_source(request: Request, course_id: int, label: str = Form(
                            reference: str = Form(""), decision: str = Form(""),
                            next: str = Form(""),
                            user: dict = Depends(get_current_user)):
-    return await _handle(request, "course", course_id, user["id"], None,
+    return await _handle(request, "course", course_id, user, None,
                          label.strip(), reference.strip(), decision,
                          next or f"/courses/{course_id}")
 
@@ -300,7 +330,7 @@ async def verify_topic_source(request: Request, topic_id: int, source_id: int,
                              user: dict = Depends(get_current_user)):
     return await _reverify(request, "topic", topic_id, source_id, label,
                           reference, decision, next or f"/topics/{topic_id}",
-                          user["id"])
+                          user)
 
 
 @router.post("/courses/{course_id}/sources/{source_id}/verify")
@@ -310,4 +340,4 @@ async def verify_course_source(request: Request, course_id: int, source_id: int,
                               user: dict = Depends(get_current_user)):
     return await _reverify(request, "course", course_id, source_id, label,
                           reference, decision, next or f"/courses/{course_id}",
-                          user["id"])
+                          user)
